@@ -1,0 +1,234 @@
+         
+   A     
+  A A    
+ A   A   
+A     A  
+AAAAAAA  
+A     A  
+A     A  
+         
+         
+BBBBBB   
+B     B  
+B     B  
+BBBBBB   
+B     B  
+B     B  
+BBBBBB   
+         
+         
+ CCCCC   
+C     C  
+C        
+C        
+C        
+C     C  
+ CCCCC   
+         
+         
+DDDDDD   
+D     D  
+D     D  
+D     D  
+D     D  
+D     D  
+DDDDDD   
+         
+         
+EEEEEEE  
+E        
+E        
+EEEEE    
+E        
+E        
+EEEEEEE  
+         
+         
+FFFFFFF  
+F        
+F        
+FFFFF    
+F        
+F        
+F        
+         
+         
+ GGGGG   
+G     G  
+G        
+G  GGGG  
+G     G  
+G     G  
+ GGGGG   
+         
+         
+H     H  
+H     H  
+H     H  
+HHHHHHH  
+H     H  
+H     H  
+H     H  
+         
+         
+  III    
+   I     
+   I     
+   I     
+   I     
+   I     
+  III    
+         
+         
+      J  
+      J  
+      J  
+      J  
+J     J  
+J     J  
+ JJJJJ   
+         
+         
+ K    K  
+ K   K   
+ K  K    
+ KKK     
+ K  K    
+ K   K   
+ K    K  
+         
+         
+L        
+L        
+L        
+L        
+L        
+L        
+LLLLLLL  
+         
+         
+M     M  
+MM   MM  
+M M M M  
+M  M  M  
+M     M  
+M     M  
+M     M  
+         
+         
+N     N  
+NN    N  
+N N   N  
+N  N  N  
+N   N N  
+N    NN  
+N     N  
+         
+         
+OOOOOOO  
+O     O  
+O     O  
+O     O  
+O     O  
+O     O  
+OOOOOOO  
+         
+         
+PPPPPP   
+P     P  
+P     P  
+PPPPPP   
+P        
+P        
+P        
+         
+         
+ QQQQQ   
+Q     Q  
+Q     Q  
+Q     Q  
+Q   Q Q  
+Q    Q   
+ QQQQ Q  
+         
+         
+RRRRRR   
+R     R  
+R     R  
+RRRRRR   
+R   R    
+R    R   
+R     R  
+         
+         
+ SSSSS   
+S     S  
+S        
+ SSSSS   
+      S  
+S     S  
+ SSSSS   
+         
+         
+TTTTTTT  
+   T     
+   T     
+   T     
+   T     
+   T     
+   T     
+         
+         
+U     U  
+U     U  
+U     U  
+U     U  
+U     U  
+U     U  
+ UUUUU   
+         
+         
+V     V  
+V     V  
+V     V  
+V     V  
+ V   V   
+  V V    
+   V     
+         
+         
+W     W  
+W  W  W  
+W  W  W  
+W  W  W  
+W  W  W  
+W  W  W  
+ WW WW   
+         
+         
+X     X  
+ X   X   
+  X X    
+   X     
+  X X    
+ X   X   
+X     X  
+         
+         
+Y     Y  
+ Y   Y   
+  Y Y    
+   Y     
+   Y     
+   Y     
+   Y     
+         
+         
+ZZZZZZZ  
+     Z   
+    Z    
+  Z      
+ Z       
+Z        
+ZZZZZZZ  
+         
