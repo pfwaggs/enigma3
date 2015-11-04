@@ -17,25 +17,27 @@ BEGIN {
 
 use Enigma;
 my $alpha = $Enigma::alpha;
-my $rotor_file = 'etc/rotors.txt';
-my %rotor_db = Enigma::Load_rotors($rotor_file);
 
-my %opts = (reflector => 'A');
+my %opts = (reflector => 'A', rotor_file => 'etc/rotors.txt');
 my @opts = (
     'verbose', 'display', 'wiring', #'reverse',
+    'rotor_file=s',
     'rotors=s'    => sub { $opts{rotors}     = [reverse split /,/, uc $_[1]] },
     'rings=s'     => sub { $opts{rings}      = [reverse split /,/, uc $_[1]] },
     'settings=s'  => sub { $opts{settings}   = [reverse split /,/, uc $_[1]] },
     'stecker=s'   => sub { $opts{stecker}    = [split /,/, uc $_[1]] },
-    'reflector=s' => sub { $opts{reflector} = uc $_[1] },
+    'reflector=s' => sub { $opts{reflector}  = uc $_[1] },
 );
 GetOptions( \%opts, @opts ) or die 'something goes here';
+$opts{verbose} = 1 if $opts{wiring}; # wiring implies verbose but not vice versa
+
 #if ($opts{reverse}) {
 #    $opts{rotors}   = [reverse @{$opts{rotors}}];
 #    $opts{rings}    = [reverse @{$opts{rings}}];
 #    $opts{settings} = [reverse @{$opts{settings}}];
 #}
 
+my %rotor_db = Enigma::Load_rotors($opts{rotor_file});
 my @rotors;
 push @rotors, $opts{stecker} ? Enigma::Set_stecker(@{$opts{stecker}}) : $alpha;
 while (my ($ndx, $val) = each (@{$opts{rotors}}) ) {
@@ -43,8 +45,11 @@ while (my ($ndx, $val) = each (@{$opts{rotors}}) ) {
 }
 push @rotors, $rotor_db{$opts{reflector}}{rotor};
 
-if ($opts{wiring}) {
-    Enigma::Encrypt_wiring(\@rotors);
+# want to see state so add an option
+
+if (@ARGV) {
+    Enigma::Encrypt_auto({rotors=>\@rotors,strings=>\@ARGV});
 } else {
-    @ARGV ?  Enigma::Encrypt_auto({rotors=>\@rotors,strings=>\@ARGV}) : Enigma::Encrypt_interactive(@rotors);
+    Enigma::Encrypt_interactive({rotors=>\@rotors, wiring=>$opts{wiring}//0, verbose=>$opts{verbose}//0});
 }
+

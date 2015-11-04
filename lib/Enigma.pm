@@ -143,34 +143,32 @@ sub Step_machine {
 sub Encrypt_letter {
     my @rotors = @{shift @_};
     my $char = shift;
-
-    my @tmp = ();
+    my @subs = ();
     @rotors = Step_machine(@rotors);
 
-    push @tmp, $char;
+    push @subs, $char;
     # through the stecker
     eval "\$char =~ tr/$alpha/$rotors[0]/";
-    push @tmp, $char;
+    push @subs, $char;
+
     # through the rotors
     for (qw{1 2 3}) {
 	eval "\$char =~ tr/$alpha/$rotors[$_]{rotor}/";
-	push @tmp, $char;
+	push @subs, $char;
     }
     # through the reflector
     eval "\$char =~ tr/$alpha/$rotors[4]/";
-    push @tmp, $char;
+    push @subs, $char;
     # backwards through the rotors
     for (qw{3 2 1}) {
 	eval "\$char =~ tr/$rotors[$_]{rotor}/$alpha/";
-	push @tmp, $char;
+	push @subs, $char;
     }
     # finally back through the stecker
     eval "\$char =~ tr/$rotors[0]/$alpha/";
-    push @tmp, $char;
-    return (\@rotors, $char, \@tmp);
-#   $rtn{$word}{xfrm} .= $char;
-#   $rtn{$word}{steps} = \@tmp;
-#   return wantarray ? %rtn : \%rtn;
+    push @subs, $char;
+    
+    return (\@rotors, $char, \@subs);
 }
 #ZZZ
 
@@ -193,9 +191,112 @@ sub Encrypt_auto {
 }
 #ZZZ
 
+# Build_wires DONE #AAA
+sub Build_wires {
+    # this structure captures the right-to-left and left-to-right transitions
+    # through the machine.
+    my %struct = (
+        stecker=>{ r_l=>qq($_[0] $_[1]), l_r=>qq($_[8] $_[9]), },
+        rotors=>[
+            { r_l=>qq($_[1] $_[2]), l_r=>qq($_[7] $_[8]), },
+            { r_l=>qq($_[2] $_[3]), l_r=>qq($_[6] $_[7]), },
+            { r_l=>qq($_[3] $_[4]), l_r=>qq($_[5] $_[6]), },
+        ],
+        reflector=>qq($_[4] $_[5]),
+    );
+
+    my @wires;
+    my $alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+    # first we wire up the reflector and push that on the return list;
+    # essentially we only do half of what we need for the rotors and stecker
+    # see next section for more info
+    my @reflector = map {" $_ "} split //, $alpha;
+    my ($enter, $exit) = split /\W/, $struct{reflector};
+    $enter = ord($enter) - ord('A');
+    $exit  = ord($exit)  - ord('A');
+    $reflector[$enter] =~ s/ (\w) /+$1</;
+    $reflector[$exit]  =~ s/ (\w) /+$1>/;
+    my ($start, $end) = $enter<$exit ? ($enter, $exit) : ($exit, $enter);
+    for ($start+1..$end-1) {
+        $reflector[$_] =~ s/ /|/;
+    }
+    push @wires, [@reflector];
+
+    # now we map the rotors and stecker. we use the ascii < and > to show flow
+    # direction, + to show direction change (horiz to vert).  first we map
+    # things flowing right to left (how the enigma is wired) then we map going
+    # the other way.  but this all happens within a single rotor or stecker
+    # nb. rotors are traversed in reverse order so we can make output easier
+    # to construct
+    for my $rotor (reverse(@{$struct{rotors}}), $struct{stecker}) {
+
+        # build the left and right halves of the rotor.  we are left/right
+        # contacts to right/left contacts
+        my @right = map {"  $_"} split //, $alpha;
+        my @left  = map {"$_  "} split //, $alpha;
+
+        # we parse the enter and exit contacts from the right-to-left motion
+        # for the respective 'rotor'.
+        my ($enter1, $exit1) = split /\W/, $rotor->{r_l};
+        $enter1 = ord($enter1) - ord('A');
+        $exit1  = ord($exit1)  - ord('A');
+        my $fix_right = $enter1; # we may need to fix a cross-over point later.
+        $right[$enter1] =~ s/  / </; # mapping entry flow contact
+        $left[$enter1]  =~ s/  /+ /; # mapping entry dir change
+        $left[$exit1]   =~ s/  /< /; # mapping exit flow contact
+        # put pipes to show connections between flow and dir change characters
+        ($start, $end) = $enter1<$exit1 ? ($enter1, $exit1) : ($exit1, $enter1);
+        for ($start+1..$end-1) {
+            $left[$_] =~ s/  /| /;
+        }
+
+        # repeat all above for the left-to-right movement.
+        my ($enter2, $exit2) = split /\W/, $rotor->{l_r};
+        $enter2 = ord($enter2) - ord('A');
+        $exit2  = ord($exit2)  - ord('A');
+        my $fix_left = $enter2;
+        $left[$enter2]   =~ s/  /> /;
+        $right[$enter2] =~ s/  / +/;
+        $right[$exit2]  =~ s/  / >/;
+        ($start, $end) = $enter2<$exit2 ? ($enter2, $exit2) : ($exit2, $enter2);
+        for ($start+1..$end-1) {
+            $right[$_] =~ s/  / |/;
+        }
+        # force the fix locations to have flow direction.  case where a pipe
+        # moves over a flow symbol.  do this after the rest have been mapped
+        $right[$fix_right] =~ s/ ./ </;
+        $left[$fix_left] =~ s/. /> /;
+
+        # prepare the tmp array that holds the work we just did
+        # 25 rows that consists of the left/right contact points and wires
+        my @tmp;
+        push @tmp, map {join(' ',$left[$_], $right[$_])} (0..25); 
+        # for the row with a '+' we want all space to be '-'. this gives our transition to the other contact point
+        map {s/ /-/g} grep {/[\+]/} @tmp;
+        # silly correction when enter1==exit1 or enter2==exit2.  want to force
+        # the crossover point to be a flow direction.  i.e. a straight through
+        # connection
+        $tmp[$enter1] =~ s/\+/</ if $enter1 == $exit1;
+        $tmp[$enter2] =~ s/\+/>/ if $enter2 == $exit2;
+        push @wires, [@tmp];
+    }
+    # finally we join all rows using pipes so they 'look' like a rotor in
+    # presentation.
+    my @rtn;
+    for my $row (0..25) {
+        push @rtn, join('|     |', map {$wires[$_][$row]} (0..4));
+    }
+    return wantarray ? @rtn : \@rtn;
+}
+#ZZZ
+
 # Encrypt_interactive DONE #AAA
 sub Encrypt_interactive {
-    my $rotor_aref = [@_];
+    my %input = %{shift @_};
+    my $rotor_aref = $input{rotors};
+    my $verbose = $input{verbose};
+    my $wiring = $input{wiring};
 
     my @data = path("etc/lightboard.txt")->lines({chomp=>1});
     my $blank = $nl x @data;
@@ -211,8 +312,16 @@ sub Encrypt_interactive {
     chomp ($input = <STDIN>);
     while ($input ne 'quit') {
 	system('clear');
-	($rotor_aref, $output, undef) = Encrypt_letter($rotor_aref, uc $input);
-	say for @{$mapping{$output}};
+	($rotor_aref, $output, my $steps) = Encrypt_letter($rotor_aref, uc $input);
+	if ($verbose) {
+	    say join('->', @$steps);
+	    if ($wiring) {
+		my @wiring = Build_wires(@$steps);
+		say for @wiring;
+	    }
+	} else {
+	    say for @{$mapping{$output}};
+	}
     } continue {
 	print "? ";
 	chomp ($input = <STDIN>);
@@ -221,138 +330,14 @@ sub Encrypt_interactive {
 }
 #ZZZ
 
-# Encrypt_wiring1 DONE #AAA 
-sub Encrypt_wiring1 {
-    our $alpha;
-#   my @state = @{shift @_};
-    my $rotor_aref = shift;
-    my @state = @$rotor_aref;
-    
-    # first we set up the matrix
-    system('clear');
-    my @setup;
-    push @setup, [map {"  $_  "} split //, $alpha]; #$state[0]];
-    for my $ndx (1..3) {
-	push @setup, [map {"  $_  "} split //, $state[$ndx]{window}];
-    }
-    push @setup, [map {"  $_  "} split //, $alpha]; #$state[4]];
-
-    map {s/^|$/  /g} @{$setup[$_]} for (0 .. 4);
-
-    my @output = ();
-    for my $col (0..25) {
-	push @output, join(' ',reverse map {$setup[$_][$col]} (0..4));
-    }
-    say for @output;
-
-    my $input;
-    print "? ";
-    chomp ($input = <STDIN>);
-    while ($input ne 'quit') {
-	system('clear');
-	($rotor_aref, my $output, my $transition_aref) = Encrypt_letter($rotor_aref, uc $input);
-	my @transitions = @$transition_aref;
-	@state = @$rotor_aref;
-	@setup = ();
-	push @setup, [map {" $_ "} split //, $alpha]; #$state[0]];
-	for my $ndx (1..3) {
-	    push @setup, [map {" $_ "} split //, $state[$ndx]{window}];
-	}
-	push @setup, [map {" $_ "} split //, $alpha]; #$state[4]];
-
-
-	# now we move through the transition list. first the stecker
-	my ($ndx) = grep {$setup[0][$_] =~ /$transitions[0]/} (0..25);
-	$setup[0][$ndx] =~ s/ /</g;
-
-	# then we step through the rotors
-	for my $a (1..3) {
-	    my ($ndx) = grep {$setup[$a][$_] =~ /$transitions[$a]/} (0..25);
-	    $setup[$a][$ndx] =~ s/ /</g;
-	}
-	# into the reflector
-	($ndx) = grep {$setup[4][$_] =~ /$transitions[4]/} (0..25);
-	$setup[4][$ndx] =~ s/ /</g;
-	# and back out of the reflector
-	($ndx) = grep {$setup[4][$_] =~ /$transitions[5]/} (0..25);
-	$setup[4][$ndx] =~ s/ />/g;
-
-	# through the rotors the other way.
-	for $a (1..3) {
-	    my ($ndx) = grep {$setup[$a][$_] =~ /$transitions[9-$a]/} (0..25);
-	    $setup[$a][$ndx] =~ s/ />/g;
-	}
-	# back through the stecker
-	($ndx) = grep {$setup[0][$_] =~ /$transitions[9]/} (0..25);
-	$setup[0][$ndx] =~ s/ />/g;
-
-	# add some space padding except for reflector
-	map {s/^|$/ /g} @{$setup[$_]} for (0..3);
-
-	# now do the reflector
-	my ($start,$stop) = grep {$setup[4][$_] !~ /\s$/} (0..25);
-	($start,$stop) = ($stop,$start) if $stop<$start;
-#$setup[4][$_] = ' '.$setup[4][$_] for (0..25);
-	map {s/^|$/ /g} @{$setup[4]};
-#$setup[4][$start] =~ s/ $/+/;
-	$setup[4][$start] =~ s/^ /+/;
-#$setup[4][$stop]  =~ s/ $/+/;
-	$setup[4][$stop]  =~ s/^ /+/;
-	for ($start+1 .. $stop-1) {
-	   #$setup[4][$_] =~ s/ $/|/;
-	    $setup[4][$_] =~ s/^ /|/;
-	}
-
-	map {s/^|$/  /g} @{$setup[$_]} for (0 .. 4);
-#	for my $col (0 .. 4) {
-#	    map {s/^|$/  /g} @{$setup[$col]};
-#	}
-
-	# now build the steps using the windows from the rotors.
-	@output = ();
-	for my $col (0..25) {
-	    push @output, join(' ',reverse map {$setup[$_][$col]} (0..4));
-	}
-	say for @output;
-    } continue {
-	print "? ";
-	chomp ($input = <STDIN>);
-    }
-}
-#ZZZ
-
-sub Init_wiring {
-    our $alpha;
-    my $rotor_aref = shift;
-    my @state = @$rotor_aref;
-    
-    # first we set up the matrix
-    system('clear');
-    my @setup;
-    push @setup, [map {"  $_  "} split //, $alpha]; #$state[0]];
-    for my $ndx (1..3) {
-	push @setup, [map {"  $_  "} split //, $state[$ndx]{window}];
-    }
-    push @setup, [map {"  $_  "} split //, $alpha]; #$state[4]];
-
-    map {s/^|$/  /g} @{$setup[$_]} for (0 .. 4);
-
-    my @output = ();
-    for my $col (0..25) {
-	push @output, join(' ',reverse map {$setup[$_][$col]} (0..4));
-    }
-#   say for @output;
-    return wantarray ? @output : \@output;
-}
-
-# Encrypt_wiring DONE #AAA 
-sub Encrypt_wiring {
-    our $alpha;
-#   my @state = @{shift @_};
-    my $rotor_aref = shift;
-    my @state = @$rotor_aref;
-    my @output = Init_wiring($rotor_aref);
-    
+# delete this junk #AAA
+## Encrypt_wiring1 #AAA 
+#sub Encrypt_wiring1 {
+#    our $alpha;
+##   my @state = @{shift @_};
+#    my $rotor_aref = shift;
+#    my @state = @$rotor_aref;
+#    
 #    # first we set up the matrix
 #    system('clear');
 #    my @setup;
@@ -368,83 +353,215 @@ sub Encrypt_wiring {
 #    for my $col (0..25) {
 #	push @output, join(' ',reverse map {$setup[$_][$col]} (0..4));
 #    }
-    say for @output;
-
-    my $input;
-    print "? ";
-    chomp ($input = <STDIN>);
-    while ($input ne 'quit') {
-	system('clear');
-	($rotor_aref, my $output, my $transition_aref) = Encrypt_letter($rotor_aref, uc $input);
-	my @transitions = @$transition_aref;
-	@state = @$rotor_aref;
+#    say for @output;
+#
+#    my $input;
+#    print "? ";
+#    chomp ($input = <STDIN>);
+#    while ($input ne 'quit') {
+#	system('clear');
+#	($rotor_aref, my $output, my $transition_aref) = Encrypt_letter($rotor_aref, uc $input);
+#	my @transitions = @$transition_aref;
+#	@state = @$rotor_aref;
 #	@setup = ();
-#	push @setup, [map {"  $_  "} split //, $alpha]; #$state[0]];
+#	push @setup, [map {" $_ "} split //, $alpha]; #$state[0]];
 #	for my $ndx (1..3) {
-#	    push @setup, [map {"  $_  "} split //, $state[$ndx]{window}];
+#	    push @setup, [map {" $_ "} split //, $state[$ndx]{window}];
 #	}
-#	push @setup, [map {"  $_  "} split //, $alpha]; #$state[4]];
- 	@setup = Init_wiring($rotor_aref);
-
-	# now we move through the transition list. first the stecker
-	my ($ndx) = grep {$setup[0][$_] =~ /$transitions[0]/} (0..25);
-	$setup[0][$ndx] =~ s/ (\w) /<$1</g;
-
-	# then we step through the rotors
-	for my $a (1..3) {
-	    my ($ndx) = grep {$setup[$a][$_] =~ /$transitions[$a]/} (0..25);
-	    $setup[$a][$ndx] =~ s/ /</g;
-	}
-	# into the reflector
-	($ndx) = grep {$setup[4][$_] =~ /$transitions[4]/} (0..25);
-	$setup[4][$ndx] =~ s/ /</g;
-	# and back out of the reflector
-	($ndx) = grep {$setup[4][$_] =~ /$transitions[5]/} (0..25);
-	$setup[4][$ndx] =~ s/ />/g;
-
-	# through the rotors the other way.
-	for $a (1..3) {
-	    my ($ndx) = grep {$setup[$a][$_] =~ /$transitions[9-$a]/} (0..25);
-	    $setup[$a][$ndx] =~ s/ />/g;
-	}
-	# back through the stecker
-	($ndx) = grep {$setup[0][$_] =~ /$transitions[9]/} (0..25);
-	$setup[0][$ndx] =~ s/ />/g;
-
-	# add some space padding except for reflector
-	map {s/^|$/ /g} @{$setup[$_]} for (0..3);
-
-	# now do the reflector
-	my ($start,$stop) = grep {$setup[4][$_] !~ /\s$/} (0..25);
-	($start,$stop) = ($stop,$start) if $stop<$start;
-#$setup[4][$_] = ' '.$setup[4][$_] for (0..25);
-	map {s/^|$/ /g} @{$setup[4]};
-#$setup[4][$start] =~ s/ $/+/;
-	$setup[4][$start] =~ s/^ /+/;
-#$setup[4][$stop]  =~ s/ $/+/;
-	$setup[4][$stop]  =~ s/^ /+/;
-	for ($start+1 .. $stop-1) {
-	   #$setup[4][$_] =~ s/ $/|/;
-	    $setup[4][$_] =~ s/^ /|/;
-	}
-
-	map {s/^|$/  /g} @{$setup[$_]} for (0 .. 4);
-#	for my $col (0 .. 4) {
-#	    map {s/^|$/  /g} @{$setup[$col]};
+#	push @setup, [map {" $_ "} split //, $alpha]; #$state[4]];
+#
+#
+#	# now we move through the transition list. first the stecker
+#	my ($ndx) = grep {$setup[0][$_] =~ /$transitions[0]/} (0..25);
+#	$setup[0][$ndx] =~ s/ /</g;
+#
+#	# then we step through the rotors
+#	for my $a (1..3) {
+#	    my ($ndx) = grep {$setup[$a][$_] =~ /$transitions[$a]/} (0..25);
+#	    $setup[$a][$ndx] =~ s/ /</g;
 #	}
+#	# into the reflector
+#	($ndx) = grep {$setup[4][$_] =~ /$transitions[4]/} (0..25);
+#	$setup[4][$ndx] =~ s/ /</g;
+#	# and back out of the reflector
+#	($ndx) = grep {$setup[4][$_] =~ /$transitions[5]/} (0..25);
+#	$setup[4][$ndx] =~ s/ />/g;
+#
+#	# through the rotors the other way.
+#	for $a (1..3) {
+#	    my ($ndx) = grep {$setup[$a][$_] =~ /$transitions[9-$a]/} (0..25);
+#	    $setup[$a][$ndx] =~ s/ />/g;
+#	}
+#	# back through the stecker
+#	($ndx) = grep {$setup[0][$_] =~ /$transitions[9]/} (0..25);
+#	$setup[0][$ndx] =~ s/ />/g;
+#
+#	# add some space padding except for reflector
+#	map {s/^|$/ /g} @{$setup[$_]} for (0..3);
+#
+#	# now do the reflector
+#	my ($start,$stop) = grep {$setup[4][$_] !~ /\s$/} (0..25);
+#	($start,$stop) = ($stop,$start) if $stop<$start;
+##$setup[4][$_] = ' '.$setup[4][$_] for (0..25);
+#	map {s/^|$/ /g} @{$setup[4]};
+##$setup[4][$start] =~ s/ $/+/;
+#	$setup[4][$start] =~ s/^ /+/;
+##$setup[4][$stop]  =~ s/ $/+/;
+#	$setup[4][$stop]  =~ s/^ /+/;
+#	for ($start+1 .. $stop-1) {
+#	   #$setup[4][$_] =~ s/ $/|/;
+#	    $setup[4][$_] =~ s/^ /|/;
+#	}
+#
+#	map {s/^|$/  /g} @{$setup[$_]} for (0 .. 4);
+##	for my $col (0 .. 4) {
+##	    map {s/^|$/  /g} @{$setup[$col]};
+##	}
+#
+#	# now build the steps using the windows from the rotors.
+#	@output = ();
+#	for my $col (0..25) {
+#	    push @output, join(' ',reverse map {$setup[$_][$col]} (0..4));
+#	}
+#	say for @output;
+#    } continue {
+#	print "? ";
+#	chomp ($input = <STDIN>);
+#    }
+#}
+##ZZZ
 
-	# now build the steps using the windows from the rotors.
-	@output = ();
-	for my $col (0..25) {
-	    push @output, join(' ',reverse map {$setup[$_][$col]} (0..4));
-	}
-	say for @output;
-    } continue {
-	print "? ";
-	chomp ($input = <STDIN>);
-    }
-}
-#ZZZ
+## Init_wiring #AAA
+#sub Init_wiring {
+#    our $alpha;
+#    my $rotor_aref = shift;
+#    my @state = @$rotor_aref;
+#    
+#    # first we set up the matrix
+#    system('clear');
+#    my @setup;
+#    push @setup, [map {"  $_  "} split //, $alpha]; #$state[0]];
+#    for my $ndx (1..3) {
+#	push @setup, [map {"  $_  "} split //, $state[$ndx]{window}];
+#    }
+#    push @setup, [map {"  $_  "} split //, $alpha]; #$state[4]];
+#
+## i think the following is useless
+##   map {s/^|$/  /g} @{$setup[$_]} for (0 .. 4);
+#
+#    return wantarray ? @setup : \@setup;
+#}
+##ZZZ
+
+## Output_matrix #AAA
+#sub Output_matrix {
+#    my $input = shift;
+#    my @output = ();
+#    for my $col (0..25) {
+#	push @output, join(' ',reverse map {$input->[$_][$col]} (0..4));
+#    }
+#    say for @output;
+#}
+##ZZZ
+
+## Encrypt_wiring #AAA 
+#sub Encrypt_wiring {
+#    our $alpha;
+##   my @state = @{shift @_};
+#    my $rotor_aref = shift;
+#    my @state = @$rotor_aref;
+#    my @output = Init_wiring($rotor_aref);
+#    Output_matrix(\@output);
+#
+#    my $input;
+#    print "? ";
+#    chomp ($input = <STDIN>);
+#    while ($input ne 'quit') {
+#	system('clear');
+#	($rotor_aref, my $output, my $transition_aref) = Encrypt_letter($rotor_aref, uc $input);
+#	my @transitions = @$transition_aref;
+#	my @ndxs;
+#	@state = @$rotor_aref;
+#
+# 	my @setup = Init_wiring($rotor_aref);
+#	Output_matrix(\@setup);
+#	my %wiring;
+#
+#	# maybe we need a structure to help here.
+#	# hash => index {
+#	# 		  rotor => string
+#	# 		  left_index => int
+#	# 		  right_index => int
+#	# 		}
+#	#
+#	# now we move through the transition list. first the stecker
+#	my ($ndx) = grep {$setup[0][$_] =~ /$transitions[0]/} (0..25);
+#	$setup[0][$ndx] =~ s/ (\w) /<$1</;
+#	push @ndxs, $ndx;
+#
+#	# then we step through the rotors
+#	for my $a (1..3) {
+#	    my ($ndx) = grep {$setup[$a][$_] =~ /$transitions[$a]/} (0..25);
+#	    $setup[$a][$ndx] =~ s/ (\w) /<$1</;
+#	    push @ndxs, $ndx;
+#	}
+#	# into the reflector
+#	($ndx) = grep {$setup[4][$_] =~ /$transitions[4]/} (0..25);
+#	$setup[4][$ndx] =~ s/ (\w) /<$1</;
+#	push @ndxs, $ndx;
+#	# and back out of the reflector
+#	($ndx) = grep {$setup[4][$_] =~ /$transitions[5]/} (0..25);
+#	$setup[4][$ndx] =~ s/ (\w) />$1>/;
+#	push @ndxs, $ndx;
+#
+#	# through the rotors the other way.
+#	for $a (3, 2, 1) {
+#	    my ($ndx) = grep {$setup[$a][$_] =~ /$transitions[9-$a]/} (0..25);
+#	    $setup[$a][$ndx] =~ s/ (\w) />$1>/;
+#	    push @ndxs, $ndx;
+#	}
+#	# back through the stecker
+#	($ndx) = grep {$setup[0][$_] =~ /$transitions[9]/} (0..25);
+#	$setup[0][$ndx] =~ s/ (\w) />$1>/;
+#	push @ndxs, $ndx;
+#
+#p @setup;
+#p @ndxs;
+#die 'later test';
+#	# add some space padding except for reflector
+#	map {s/^|$/ /g} @{$setup[$_]} for (0..3);
+#
+#	# now do the reflector
+#	my ($start,$stop) = grep {$setup[4][$_] !~ /\s$/} (0..25);
+#	($start,$stop) = ($stop,$start) if $stop<$start;
+##$setup[4][$_] = ' '.$setup[4][$_] for (0..25);
+#	map {s/^|$/ /g} @{$setup[4]};
+##$setup[4][$start] =~ s/ $/+/;
+#	$setup[4][$start] =~ s/^ /+/;
+##$setup[4][$stop]  =~ s/ $/+/;
+#	$setup[4][$stop]  =~ s/^ /+/;
+#	for ($start+1 .. $stop-1) {
+#	   #$setup[4][$_] =~ s/ $/|/;
+#	    $setup[4][$_] =~ s/^ /|/;
+#	}
+#
+#	map {s/^|$/  /g} @{$setup[$_]} for (0 .. 4);
+##	for my $col (0 .. 4) {
+##	    map {s/^|$/  /g} @{$setup[$col]};
+##	}
+#
+#	# now build the steps using the windows from the rotors.
+#	@output = ();
+#	for my $col (0..25) {
+#	    push @output, join(' ',reverse map {$setup[$_][$col]} (0..4));
+#	}
+#	say for @output;
+#    } continue {
+#	print "? ";
+#	chomp ($input = <STDIN>);
+#    }
+#}
+##ZZZ
 
 ## Show_vertical #AAA
 #sub Show_vertical {
@@ -474,5 +591,6 @@ sub Encrypt_wiring {
 ##    }
 #}
 ##ZZZ
+#ZZZ
 
 1;
