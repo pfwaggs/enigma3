@@ -14,42 +14,55 @@ use Cwd;
 BEGIN {
     unshift @INC, cwd().'/lib';
 }
-
 use Enigma;
+
+sub qp {
+    my @input = @_;
+    warn $input[0];
+    p $input[1];
+    die $input[2];
+}
+
 my $alpha = $Enigma::alpha;
 
-my %opts = (reflector => 'A', rotor_file => 'etc/rotors.txt');
-my @opts = (
-    'verbose', 'display', 'wiring', #'reverse',
-    'rotor_file=s',
-    'rotors=s'    => sub { $opts{rotors}     = [reverse split /,/, uc $_[1]] },
-    'rings=s'     => sub { $opts{rings}      = [reverse split /,/, uc $_[1]] },
-    'settings=s'  => sub { $opts{settings}   = [reverse split /,/, uc $_[1]] },
-    'stecker=s'   => sub { $opts{stecker}    = [split /,/, uc $_[1]] },
-    'reflector=s' => sub { $opts{reflector}  = uc $_[1] },
+my %opts = (rotor_file => 'etc/rotors.txt',);
+my @opts = ( 'rotor_file=s',);
+
+my %pass_opts = (verbose=>0, wiring=>0, transitions=>0, state_check=>0);
+my @pass_opts = (
+    'state_check' => sub { $pass_opts{state_check}++},
+    'verbose'     => sub { $pass_opts{verbose}      = 1 - $pass_opts{verbose} },
+    'transitions' => sub { $pass_opts{transitions}  = 1 - $pass_opts{transitions} },
+    'wiring'      => sub { $pass_opts{wiring}       = 1 - $pass_opts{wiring} },
 );
-GetOptions( \%opts, @opts ) or die 'something goes here';
-$opts{verbose} = 1 if $opts{wiring}; # wiring implies verbose but not vice versa
 
-#if ($opts{reverse}) {
-#    $opts{rotors}   = [reverse @{$opts{rotors}}];
-#    $opts{rings}    = [reverse @{$opts{rings}}];
-#    $opts{settings} = [reverse @{$opts{settings}}];
-#}
+my %universal = (reflector => 'A',);
+my @universal = (
+    'rotors=s'    => sub { $universal{rotors}       = [reverse split /,/, uc $_[1]] },
+    'rings=s'     => sub { $universal{rings}        = [reverse split /,/, uc $_[1]] },
+    'settings=s'  => sub { $universal{settings}     = [reverse split /,/, uc $_[1]] },
+    'stecker=s'   => sub { $universal{stecker}      = [split /,/, uc $_[1]] },
+    'reflector=s' => sub { $universal{reflector}    = uc $_[1] },
+);
+GetOptions( \%opts, @opts, @pass_opts, @universal ) or die 'something goes here';
 
-my %rotor_db = Enigma::Load_rotors($opts{rotor_file});
-my @rotors;
-push @rotors, $opts{stecker} ? Enigma::Set_stecker(@{$opts{stecker}}) : $alpha;
-while (my ($ndx, $val) = each (@{$opts{rotors}}) ) {
-    push @rotors, {Enigma::Get_rotor($rotor_db{$val}, $opts{rings}[$ndx], $opts{settings}[$ndx], $opts{display}//0, $opts{verbose}//0)};
-}
-push @rotors, $rotor_db{$opts{reflector}}{rotor};
+my @rotors = Enigma::Configure_machine({%opts, %universal});
 
-# want to see state so add an option
+Enigma::State_check({rotors=>\@rotors, state_check=>$pass_opts{state_check}}) if $pass_opts{state_check};
 
 if (@ARGV) {
-    Enigma::Encrypt_auto({rotors=>\@rotors,strings=>\@ARGV});
+    Enigma::Encrypt_auto({rotors => \@rotors, strings => \@ARGV});
 } else {
-    Enigma::Encrypt_interactive({rotors=>\@rotors, wiring=>$opts{wiring}//0, verbose=>$opts{verbose}//0});
+
+# interactive has different modes; plain it just shows positions and
+# lightboard.  you can add transitions with --transisitons
+# or you can show wiring instead of lightboard with --wiring 
+# lightboard transitions wiring
+# 1          0           0
+# 1          1           0
+# 0          0           1
+
+    $pass_opts{transitions} = 0 if $pass_opts{wiring};
+    Enigma::Encrypt_interactive({rotors => \@rotors, %pass_opts});
 }
 

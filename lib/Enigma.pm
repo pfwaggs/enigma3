@@ -7,15 +7,14 @@ use v5.18;
 
 use Term::ReadKey;
 use Path::Tiny;
-#use Data::Dumper;
 use Data::Printer;
 my $nl = "\n";
 my $tb = "\t";
 our $alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 #ZZZ
 
-# Load_rotors DONE #AAA
-sub Load_rotors {
+# _Load_rotors DONE #AAA
+sub _Load_rotors {
     my $file = shift;
     my %rotors;
     my $A = ord 'A';
@@ -31,53 +30,51 @@ sub Load_rotors {
 
 #ZZZ
 
-# Get_rotor DONE #AAA
-sub Get_rotor {
-    our $alpha;
+# _Get_rotor DONE #AAA
+sub _Get_rotor {
+    my $alpha = $Enigma::alpha;
     my %rtn = %{shift @_}; # this gives us rotor and notch key/value
     $rtn{window} = $alpha;
-    $rtn{alpha} = $alpha;
     my $ring = shift;
     my $setting = shift;
-    my $display = shift // 0;
-    my $verbose = shift // 0;
 
+    # first we generate the raw display values (nothing in rtn changes here)
+    # the tyre shows where A (|) and notch(s) (#) are before being aligned
     my @spaces = (' ')x26;
     $spaces[0] = '|';
     $spaces[ord($_)-ord('A')] = '#' for split //,$rtn{notch};
     my $tyre = join('',@spaces);
-    my @rtn;
-    push(@rtn, $rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25) if $verbose;
+    push @{$rtn{display}}, [$rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25];
 
+    # now we align the tyre and the rtn{window} to accomodate the ring setting
     my $offset = ord($ring)-ord('A');
     $tyre =~ s/^(.{$offset})(.+)$/$2$1/;
     $rtn{window} =~ s/^(.{$offset})(.+)$/$2$1/;
-    push(@rtn, $rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25) if $verbose;
+    push @{$rtn{display}}, [$rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25];
 
+    # now we adjust the tyre, rtn{window} and rtn{rotor} for the offset
+    # distance between ring and the base setting
     my $set = (ord($setting) - ord($ring)) % 26;
     $tyre  =~ s/^(.{$set})(.+)$/$2$1/;
     $rtn{window} =~ s/^(.{$set})(.+)$/$2$1/;
     $rtn{rotor} =~ s/^(.{$set})(.+)$/$2$1/;
-    push(@rtn, $rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25) if $verbose;
+    push @{$rtn{display}}, [$rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25];
     
-    #my $shift_alpha = $alpha =~ s/(.+)(.)/$2$1/r;
-    my $shift_alpha = $alpha =~ s/(.+)(.{$set})/$2$1/r;
+    # need to adjust the rtn{roor} to accomodate the set value.  the moves the
+    # transform values backwards in the alphabet
+    my $shift_alpha = $alpha =~ s/(.+)(.{$set})/$2$1/r; # nb the pattern split is reverse from above
     eval "\$rtn{rotor} =~ tr/$alpha/$shift_alpha/";
-#    while ($set) {
-#	eval "\$rtn{rotor} =~ tr/$alpha/$shift_alpha/";
-#    } continue {
-#	$set--;
-#    }
-    push @rtn, $rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25;
-    p @rtn if $display;
+    push @{$rtn{display}}, [$rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25];
     return wantarray ? %rtn : \%rtn;
 }
 #ZZZ
 
-# Set_stecker DONE #AAA
-sub Set_stecker {
+# _Set_stecker DONE #AAA
+sub _Set_stecker {
+    my @input = @{shift @_};
     my %stecker = map {$_ => $_} ('A' .. 'Z');
-    for (@_) {
+    for (@input) {
+	next unless defined;
         my ($left, $right) = split //;
         $stecker{$left} = $right;
         $stecker{$right} = $left;
@@ -87,20 +84,20 @@ sub Set_stecker {
 }
 #ZZZ
 
-# Show_rotors #AAA
-sub Show_rotors {
-    my @state = @{shift @_};
-    my @window = ();
-    for (1..3) {
-        $state[4-$_]{window} =~ /^(.)/;
-        push @window,$1;
-    }
-    return join(' ',@window);
-}
-#ZZZ
+## Show_rotors #AAA
+#sub Show_rotors {
+#    my @state = @{shift @_};
+#    my @window = ();
+#    for (1..3) {
+#        $state[4-$_]{window} =~ /^(.)/;
+#        push @window,$1;
+#    }
+#    return join(' ',@window);
+#}
+##ZZZ
 
-# Step_rotor DONE #AAA
-sub Step_rotor {
+# _Step_rotor DONE #AAA
+sub _Step_rotor {
     my %rtn = %{shift @_};
 #   p %rtn;
     map {s/^(.)(.+)$/$2$1/} @rtn{qw(window rotor)};
@@ -111,8 +108,8 @@ sub Step_rotor {
 }
 #ZZZ
 
-# Step_machine DONE #AAA
-sub Step_machine {
+# _Step_machine DONE #AAA
+sub _Step_machine {
     my @state = (@_);
 #   p @state;
 
@@ -122,13 +119,13 @@ sub Step_machine {
 
     my $pawl_f = $rotor_f{window} =~ /^$rotor_f{notch}/ ? 1 : 0;
     my $pawl_m = $rotor_m{window} =~ /^$rotor_m{notch}/ ? 1 : 0;
-    %rotor_f = Step_rotor(\%rotor_f);
+    %rotor_f = _Step_rotor(\%rotor_f);
     if ($pawl_f) {
-        %rotor_m = Step_rotor(\%rotor_m);
+        %rotor_m = _Step_rotor(\%rotor_m);
     }
     if ($pawl_m) {
-        %rotor_m = Step_rotor(\%rotor_m) unless $pawl_f;
-        %rotor_s = Step_rotor(\%rotor_s);
+        %rotor_m = _Step_rotor(\%rotor_m) unless $pawl_f;
+        %rotor_s = _Step_rotor(\%rotor_s);
     }
     $state[1] = \%rotor_f;
     $state[2] = \%rotor_m;
@@ -139,12 +136,12 @@ sub Step_machine {
 }
 #ZZZ
 
-# Encrypt_letter DONE #AAA
-sub Encrypt_letter {
+# _Encrypt_letter DONE #AAA
+sub _Encrypt_letter {
     my @rotors = @{shift @_};
     my $char = shift;
     my @subs = ();
-    @rotors = Step_machine(@rotors);
+    @rotors = _Step_machine(@rotors);
 
     push @subs, $char;
     # through the stecker
@@ -172,27 +169,8 @@ sub Encrypt_letter {
 }
 #ZZZ
 
-# Encrypt_auto DONE #AAA
-sub Encrypt_auto {
-    my %input = %{shift @_};
-    my $rotor_aref = $input{rotors};
-    my @strings = @{$input{strings}};
-
-    my %rtn;
-    for my $word (@strings) {
-        $rtn{$word}{xfrm} = '';
-        for my $char (split //, uc $word) {
-	    ($rotor_aref, $char, undef) = Encrypt_letter($rotor_aref, $char);
-	    $rtn{$word}{xfrm} .= $char;
-	}
-    }
-    say join(' ', @strings);
-    say join(' ', map {$rtn{$_}{xfrm}} @strings);
-}
-#ZZZ
-
-# Build_wires DONE #AAA
-sub Build_wires {
+# _Build_wires DONE #AAA
+sub _Build_wires {
     # this structure captures the right-to-left and left-to-right transitions
     # through the machine.
     my %struct = (
@@ -291,12 +269,84 @@ sub Build_wires {
 }
 #ZZZ
 
+# _Show_positions DONE AAA
+sub _Show_positions {
+    my $file = 'etc/alphabet.txt';
+    my @lines = path($file)->lines({chomp=>1});
+
+    my @alphas;
+    for my $l (@_) {
+	$l =~ s/^(.)(.+)?$/$1/;
+	push @alphas, [grep {/$l/} @lines];
+    }
+    my @output;
+    while (my ($ndx, $line) = each ($alphas[0])) {
+	push @output, ["\t\t\t\t".join("\t", $alphas[0][$ndx],$alphas[1][$ndx],$alphas[2][$ndx])];
+    }
+    return wantarray ? @output : \@output;
+}
+#ZZZ
+
+# Configure_machine DONE #AAA
+sub Configure_machine {
+    my %input = %{shift @_};
+    my %rotor_db = Enigma::_Load_rotors($input{rotor_file});
+    my @rtn;
+    push @rtn, Enigma::_Set_stecker($input{stecker}//[undef]);
+    while (my ($ndx,$val) = each (@{$input{rotors}})) {
+	push @rtn, {Enigma::_Get_rotor($rotor_db{$val}, $input{rings}[$ndx], $input{settings}[$ndx])};
+    }
+    push @rtn, $rotor_db{$input{reflector}}{rotor};
+    return wantarray ? @rtn : \@rtn;
+}
+#ZZZ
+
+# State_check DONE #AAA
+sub State_check {
+    my %input = %{shift @_};
+    my @rotors = @{$input{rotors}};
+    my $state_check = $input{state_check};
+    for my $ndx (1,2,3) {
+	system('clear');
+	my $rotor = $rotors[$ndx];
+	warn "config steps for rotor $ndx";
+	my @display = @{$rotor->{display}};
+	if ($state_check > 1) {
+	    for my $step (0,1,2) {
+		say $_ for @{$display[$step]};
+	    }
+	}
+	say $_ for @{$display[3]};
+	my $tmp = <STDIN>;
+    }
+}
+#ZZZ
+
+# Encrypt_auto DONE #AAA
+sub Encrypt_auto {
+    my %input = %{shift @_};
+    my $rotor_aref = $input{rotors};
+    my @strings = @{$input{strings}};
+
+    my %rtn;
+    for my $word (@strings) {
+        $rtn{$word}{xfrm} = '';
+        for my $char (split //, uc $word) {
+	    ($rotor_aref, $char, undef) = _Encrypt_letter($rotor_aref, $char);
+	    $rtn{$word}{xfrm} .= $char;
+	}
+    }
+    say join(' ', @strings);
+    say join(' ', map {$rtn{$_}{xfrm}} @strings);
+}
+#ZZZ
+
 # Encrypt_interactive DONE #AAA
 sub Encrypt_interactive {
     my %input = %{shift @_};
-    my $rotor_aref = $input{rotors};
-    my $verbose = $input{verbose};
-    my $wiring = $input{wiring};
+    my $rotor_aref  = $input{rotors};
+    my $wiring      = $input{wiring};
+    my $transitions = $input{transitions};
 
     my @data = path("etc/lightboard.txt")->lines({chomp=>1});
     my $blank = $nl x @data;
@@ -307,21 +357,17 @@ sub Encrypt_interactive {
     my $input;
     my $output;
     system('clear');
-    say $blank; #for @data;
+    say @$_ for (Enigma::_Show_positions(map {$rotor_aref->[$_]{window}} (3,2,1)));
+    say ''; # blank line
     print "? ";
     chomp ($input = <STDIN>);
-    while ($input ne 'quit') {
+    until ($input =~ /^(?i)quit(.+)?\z/) {
 	system('clear');
-	($rotor_aref, $output, my $steps) = Encrypt_letter($rotor_aref, uc $input);
-	if ($verbose) {
-	    say join('->', @$steps);
-	    if ($wiring) {
-		my @wiring = Build_wires(@$steps);
-		say for @wiring;
-	    }
-	} else {
-	    say for @{$mapping{$output}};
-	}
+	($rotor_aref, $output, my $steps) = _Encrypt_letter($rotor_aref, uc $input);
+	say @$_ for (Enigma::_Show_positions(map {$rotor_aref->[$_]{window}} (3,2,1)));
+	say ''; # blank line
+	say for ($wiring ? (_Build_wires(@$steps)) : @{$mapping{$output}});
+	say join('->', @$steps) if $transitions;
     } continue {
 	print "? ";
 	chomp ($input = <STDIN>);
