@@ -1,0 +1,99 @@
+
+=pod
+=head1 NAME
+enigma.pl
+
+=head1 synopsis
+
+enigma3.pl (universal_options) (pass_options) (options)
+
+=head1 description
+
+This is an enigma emulator. You configure via the command line (default configuration not implimented).
+For testing it is highly encouraged to configure an alias and define some variables
+
+Basic operation entails configuration and data entry.  If the data to be transformed is given on the command line then
+the program runs in automatic mode.  Otherwise, enigma3.pl runs as an interactive program.
+
+=head1 (options)
+
+=over 4
+
+=item B<--rotor_file>
+
+This is used to override the default of 'etc/rotors.txt'.
+
+=back
+
+=head1 (universal_options)
+
+=over 4
+
+
+Verbose mode shows more of what is happening behind the scenes. Use this once to see the inital configuration (to doublecheck
+things). Used a second time you can see the actual stepping of the rotors and a simplified wiring diagrom of the system.
+
+=item B<--stepping>
+
+Fill in later but I think allows you to see the stepping of the system rotors from the inital state. More a debugging tool.
+
+=item B<-graphic>
+
+Try to make the screen look more like an enigma machine. As best as I can do with ascii.  Shows the rotors along the top with
+a split to show the lamp board atop the keyboard. When you type a key the keyboard shows the letter and the lamp board shows
+what the enciphered version is. Feels more like the actual enigma machine this way.
+
+=item B<--man>
+
+This man page.
+
+=item B<--help>
+
+Just the synopsis.
+
+=item B<--rotors R:R:R>
+
+Specify the rotors in left to right order. Use Roman numerals (traditional nomenclature). Seperate the names with a ':'.
+(default is I:II:III)
+
+=item B<--setting (L:L:L|N:N:N)]>
+
+This allows the setting of the ringstellung (ring settings for the rotors). Notation same as for rotors with the addition
+that you can specify the values either as letters or numbers (A == 01). (default is A:A:A)
+
+=item B<--position (L:L:L|N:N:N)]>
+
+This sets the initial position of the rotors. See comment for 'setting' for details. (default is A:A:A)
+
+=item B<--stecker LL(:LL....)]>
+
+This specifies the stecker pairs to be used. Specify as pairs of letters separated by ':'. (no default)
+
+=item B<--reflector L>
+
+Specify the reflector to use. (default is the 'B' reflector)
+
+=item B<--file name>
+
+Specify the plaintext file.
+
+=back
+
+=head1 example
+
+enigma.pl --rotors II:I:III --setting X:M:V --position F:O:L --stecker AM:FI:NV:PS:TU:WZ --reflector A
+(nb. the daily key is FOL but the message key is ABL)
+ plaintext: FEIND LIQEI NFANT ERIEK OLONN EBEOB AQTET XANFA NGSUE 
+ciphertext: GCDSE AHUGW TQGRK VLFGX UCALX VYMIG MMNMF DXTGN VHVRM
+
+ plaintext: DAUSG ANGBA ERWAL DEXEN DEDRE IKMOS TWAER TSNEU STADT
+ciphertext: MEVOU YFZSL RHDRR XFJWC FHUHM UNZEF RDISI KBGPM YVXUZ
+
+(example from Frode Weierud's Cryptocellar website, http://cryptocellar.web.cern.ch/cryptocellar/enigma/EMsg1930.html)
+[add a reference to tony sale's site from bletchley park]
+
+=head1 author
+
+Bill Pemberton
+
+=cut
