@@ -28,12 +28,13 @@ my $alpha = $Enigma::alpha;
 my %opts = (rotor_file => 'etc/rotors.txt',);
 my @opts = ( 'rotor_file=s',);
 
-my %pass_opts = (verbose=>0, wiring=>0, transitions=>0, state_check=>0);
+my %pass_opts = (verbose=>0, wiring=>0, fancy_wiring=>0, transitions=>0, state_check=>0);
 my @pass_opts = (
-    'state_check' => sub { $pass_opts{state_check}++},
-    'verbose'     => sub { $pass_opts{verbose}      = 1 - $pass_opts{verbose} },
-    'transitions' => sub { $pass_opts{transitions}  = 1 - $pass_opts{transitions} },
-    'wiring'      => sub { $pass_opts{wiring}       = 1 - $pass_opts{wiring} },
+    'state_check'  => sub { $pass_opts{state_check}++},
+    'verbose'      => sub { $pass_opts{verbose}      = 1 - $pass_opts{verbose}      },
+    'transitions'  => sub { $pass_opts{transitions}  = 1 - $pass_opts{transitions}  },
+    'wiring'       => sub { $pass_opts{wiring}       = 1 - $pass_opts{wiring}       },
+    'fancy_wiring' => sub { $pass_opts{fancy_wiring} = 1 - $pass_opts{fancy_wiring} },
 );
 
 my %universal = (reflector => 'A',);
@@ -62,7 +63,7 @@ if (@ARGV) {
 # 1          1           0
 # 0          0           1
 
-    $pass_opts{transitions} = 0 if $pass_opts{wiring};
+    $pass_opts{transitions} = 0 if $pass_opts{wiring} or $pass_opts{fancy_wiring};
     Enigma::Encrypt_interactive({rotors => \@rotors, %pass_opts});
 }
 
