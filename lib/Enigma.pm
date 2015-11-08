@@ -11,6 +11,14 @@ use Data::Printer;
 my $nl = "\n";
 my $tb = "\t";
 our $alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+
+sub _qp {
+    my @input = @_;
+    warn $input[0];
+    p $input[1];
+    die $input[2];
+}
+
 #ZZZ
 
 # _Load_rotors DONE #AAA
@@ -79,31 +87,15 @@ sub _Set_stecker {
         $stecker{$left} = $right;
         $stecker{$right} = $left;
     }
-#   map {$stecker{$_} = $_} grep {! exists $stecker{$_}} ('A' .. 'Z');
     return join('',@stecker{sort keys %stecker});
 }
 #ZZZ
 
-## Show_rotors #AAA
-#sub Show_rotors {
-#    my @state = @{shift @_};
-#    my @window = ();
-#    for (1..3) {
-#        $state[4-$_]{window} =~ /^(.)/;
-#        push @window,$1;
-#    }
-#    return join(' ',@window);
-#}
-##ZZZ
-
 # _Step_rotor DONE #AAA
 sub _Step_rotor {
     my %rtn = %{shift @_};
-#   p %rtn;
     map {s/^(.)(.+)$/$2$1/} @rtn{qw(window rotor)};
     eval "\$rtn{rotor} =~ tr/ABCDEFGHIJKLMNOPQRSTUVWXYZ/ZABCDEFGHIJKLMNOPQRSTUVWXY/";
-#   p %rtn;
-#   die 'one step';
     return wantarray ? %rtn : \%rtn;
 }
 #ZZZ
@@ -111,7 +103,6 @@ sub _Step_rotor {
 # _Step_machine DONE #AAA
 sub _Step_machine {
     my @state = (@_);
-#   p @state;
 
     my %rotor_f = %{$state[1]};
     my %rotor_m = %{$state[2]};
@@ -130,7 +121,6 @@ sub _Step_machine {
     $state[1] = \%rotor_f;
     $state[2] = \%rotor_m;
     $state[3] = \%rotor_s;
-#   p @state;
 
     return wantarray ? @state : \@state;
 }
@@ -169,22 +159,22 @@ sub _Encrypt_letter {
 }
 #ZZZ
 
-# _Build_wires DONE #AAA
-sub _Build_wires {
+# _Build_fancy_wires DONE #AAA
+sub _Build_fancy_wires {
     # this structure captures the right-to-left and left-to-right transitions
     # through the machine.
     my %struct = (
         stecker=>{ r_l=>qq($_[0] $_[1]), l_r=>qq($_[8] $_[9]), },
         rotors=>[
-            { r_l=>qq($_[1] $_[2]), l_r=>qq($_[7] $_[8]), },
-            { r_l=>qq($_[2] $_[3]), l_r=>qq($_[6] $_[7]), },
             { r_l=>qq($_[3] $_[4]), l_r=>qq($_[5] $_[6]), },
+            { r_l=>qq($_[2] $_[3]), l_r=>qq($_[6] $_[7]), },
+            { r_l=>qq($_[1] $_[2]), l_r=>qq($_[7] $_[8]), },
         ],
         reflector=>qq($_[4] $_[5]),
     );
 
     my @wires;
-    my $alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    my $alpha = $Enigma::alpha; #'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
     # first we wire up the reflector and push that on the return list;
     # essentially we only do half of what we need for the rotors and stecker
@@ -207,7 +197,7 @@ sub _Build_wires {
     # the other way.  but this all happens within a single rotor or stecker
     # nb. rotors are traversed in reverse order so we can make output easier
     # to construct
-    for my $rotor (reverse(@{$struct{rotors}}), $struct{stecker}) {
+    for my $rotor (@{$struct{rotors}}, $struct{stecker}) {
 
         # build the left and right halves of the rotor.  we are left/right
         # contacts to right/left contacts
@@ -263,9 +253,84 @@ sub _Build_wires {
     # presentation.
     my @rtn;
     for my $row (0..25) {
-        push @rtn, join('|     |', map {$wires[$_][$row]} (0..4));
+	my $str = join('|     |', map {$wires[$_][$row]} (0..4)) =~ s/((<|>)\w\|)(\s{5})(\|\w(<|>))/$1--$2--$4/gr;
+	$str =~ s/((<|>)\|)(\s{5})/$1--$2--/;
+	$str =~ s/(<\w)$/$1------- key/;
+	$str =~ s/(>\w)$/$1--- lamp/;
+        push @rtn, $str;
     }
     return wantarray ? @rtn : \@rtn;
+}
+#ZZZ
+
+# _Build_wires DONE #AAA
+sub _Build_wires {
+    my $alpha = $Enigma::alpha;
+    # this structure captures the right-to-left and left-to-right transitions
+    # through the machine.
+    my %struct = (
+        stecker=>{ r_l=>[$_[0], $_[1]], l_r=>[$_[8], $_[9]], },
+        rotors=>[
+            { r_l=>[$_[3], $_[4]], l_r=>[$_[5], $_[6]], },
+            { r_l=>[$_[2], $_[3]], l_r=>[$_[6], $_[7]], },
+            { r_l=>[$_[1], $_[2]], l_r=>[$_[7], $_[8]], },
+        ],
+        reflector=>{ r_l=>[$_[4], $_[5]] },
+    );
+    
+    # adjust struct to have ascii ord vice char values.  saves from doing
+    # regex search
+    for my $wheel (values %struct) {
+	if (ref $wheel eq 'HASH') {
+	    for my $key (keys %$wheel) {
+		map {$_ = ord($_)-ord('A')} @{$wheel->{$key}};
+	    }
+	} else {
+	    for my $href (@$wheel) {
+		for my $key (keys %$href) {
+		    map {$_ = ord($_)-ord('A')} @{$href->{$key}};
+		}
+	    }
+	}
+    }
+
+    # initialize the wheels array
+    my @wheels;
+    for my $wheel (0..4) {
+	push @wheels, [map {" $_ "} split //, $alpha];
+    }
+
+    # do the reflector (index 0 in wheels) first then do the rest
+    # first we pick up direction then we add pipes to make it look good
+    my ($enter, $exit) = @{$struct{reflector}{r_l}};
+    $wheels[0][$enter] =~ s/ (\w) $/+$1</;
+    $wheels[0][$exit]  =~ s/ (\w) $/+$1>/;
+    my ($start, $end) = $enter<$exit ? ($enter, $exit) : ($exit, $enter);
+    for ($start+1..$end-1) {
+        $wheels[0][$_] =~ s/ /|/;
+    }
+
+    my @bunch = (@{$struct{rotors}},$struct{stecker}); # we have to create this list so while doesn't loop forever
+    while (my ($ndx, $href) = each (@bunch)) {
+	$wheels[1+$ndx][$href->{r_l}[0]] =~ s/ $/</;
+	$wheels[1+$ndx][$href->{r_l}[1]] =~ s/^ /</;
+	$wheels[1+$ndx][$href->{l_r}[0]] =~ s/^ />/;
+	$wheels[1+$ndx][$href->{l_r}[1]] =~ s/ $/>/;
+    }
+
+    # nb the wheels consist of arrays of arrays so we need to glue the rows
+    # together in column order.  after the join, we change space to - when
+    # between two <'s or >'s.  we do not have the cases > < or < > to worry about
+    # also add some on the ends to show key and lamp values.
+    my @rtn;
+    for my $row (0..25) {
+	my $str = join('     ', map {$wheels[$_][$row]} (0..4)) =~ s/(<|>)(\s{5})(<|>)/$1-----$3/gr;
+	$str =~ s/(\w<)$/$1------- key/;
+	$str =~ s/(\w>)$/$1--- lamp/;
+        push @rtn, $str;
+    }
+    return wantarray ? @rtn : \@rtn;
+
 }
 #ZZZ
 
@@ -344,9 +409,11 @@ sub Encrypt_auto {
 # Encrypt_interactive DONE #AAA
 sub Encrypt_interactive {
     my %input = %{shift @_};
-    my $rotor_aref  = $input{rotors};
-    my $wiring      = $input{wiring};
-    my $transitions = $input{transitions};
+
+    my $rotor_aref   = $input{rotors};
+    my $wiring       = $input{wiring};
+    my $fancy_wiring = $input{fancy_wiring};
+    my $transitions  = $input{transitions};
 
     my @data = path("etc/lightboard.txt")->lines({chomp=>1});
     my $blank = $nl x @data;
@@ -366,7 +433,13 @@ sub Encrypt_interactive {
 	($rotor_aref, $output, my $steps) = _Encrypt_letter($rotor_aref, uc $input);
 	say @$_ for (Enigma::_Show_positions(map {$rotor_aref->[$_]{window}} (3,2,1)));
 	say ''; # blank line
-	say for ($wiring ? (_Build_wires(@$steps)) : @{$mapping{$output}});
+	if ($wiring) {
+	    say for _Build_wires(@$steps);
+	} elsif ($fancy_wiring) {
+	    say for _Build_fancy_wires(@$steps);
+	} else {
+	    say for @{$mapping{$output}};
+	}
 	say join('->', @$steps) if $transitions;
     } continue {
 	print "? ";
