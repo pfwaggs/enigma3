@@ -6,8 +6,10 @@ use warnings;
 use strict;
 use v5.18;
 
-use Getopt::Long qw( :config no_ignore_case auto_help );
+use Getopt::Long qw( GetOptionsFromArray :config pass_through no_ignore_case auto_help );
 use Data::Printer;
+use JSON::PP;
+use Path::Tiny;
 #use Pod::Usage;
 use Cwd;
 
@@ -16,37 +18,39 @@ BEGIN {
 }
 use Enigma;
 
-sub qp {
-    my @input = @_;
-    warn $input[0];
-    p $input[1];
-    die $input[2];
-}
-
 my $alpha = $Enigma::alpha;
 
-my %opts = (rotor_file => 'etc/rotors.txt',);
-my @opts = ( 'rotor_file=s',);
+# do we have a optional config file?
+my $config = 'etc/default_config.jsn';
+GetOptionsFromArray( \@ARGV, 'config=s' => \$config);
 
-my %pass_opts = (verbose=>0, wiring=>0, fancy_wiring=>0, transitions=>0, state_check=>0);
+# load up the config file
+my $jpp = JSON::PP->new->pretty->canonical;
+my $string = join(' ',path($config)->lines({chomp=>1}));
+my %opts = %{$jpp->decode($string)};
+#warn 'defaults: '; p %opts; die 'stop';
+
+# these get passed through to called routines.
+my %pass_opts = (wiring=>0, fancy_wiring=>0, transitions=>0, state_check=>0);
 my @pass_opts = (
     'state_check'  => sub { $pass_opts{state_check}++},
-    'verbose'      => sub { $pass_opts{verbose}      = 1 - $pass_opts{verbose}      },
     'transitions'  => sub { $pass_opts{transitions}  = 1 - $pass_opts{transitions}  },
     'wiring'       => sub { $pass_opts{wiring}       = 1 - $pass_opts{wiring}       },
     'fancy_wiring' => sub { $pass_opts{fancy_wiring} = 1 - $pass_opts{fancy_wiring} },
 );
 
-my %universal = (reflector => 'A',);
-my @universal = (
-    'rotors=s'    => sub { $universal{rotors}       = [reverse split /,/, uc $_[1]] },
-    'rings=s'     => sub { $universal{rings}        = [reverse split /,/, uc $_[1]] },
-    'settings=s'  => sub { $universal{settings}     = [reverse split /,/, uc $_[1]] },
-    'stecker=s'   => sub { $universal{stecker}      = [split /,/, uc $_[1]] },
-    'reflector=s' => sub { $universal{reflector}    = uc $_[1] },
-);
-GetOptions( \%opts, @opts, @pass_opts, @universal ) or die 'something goes here';
+#GetOptions( \%opts, @opts, @pass_opts,) or die 'something goes here';
+GetOptions( \%opts, @{$opts{opts}}, 'build_config=s', @pass_opts,) or die 'something goes here';
 
+if ($opts{build_config}//0) {
+    Enigma::Build_config(\%opts);
+    die 'done';
+} else {
+    %opts = Enigma::Parse(\%opts);
+}
+
+my %universal;
+@universal{qw(rotors rings settings stecker reflector)} = @opts{qw(rotors rings settings stecker reflector)};
 my @rotors = Enigma::Configure_machine({%opts, %universal});
 
 Enigma::State_check({rotors=>\@rotors, state_check=>$pass_opts{state_check}}) if $pass_opts{state_check};
