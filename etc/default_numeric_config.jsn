@@ -1,0 +1,15 @@
+{
+   "opts" : [
+      "rotors=s",
+      "rings=s",
+      "reflector=s",
+      "settings=s",
+      "stecker=s"
+   ],
+   "reflector" : "A",
+   "rings" : "24:13:22",
+   "rotor_file" : "etc/rotors.txt",
+   "rotors" : "II:I:III",
+   "settings" : "01:02:12",
+   "stecker" : "AM:FI:NV:PS:TU:WZ"
+}
