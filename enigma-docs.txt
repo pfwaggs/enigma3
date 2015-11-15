@@ -1,6 +1,8 @@
 
 =pod
+
 =head1 NAME
+
 enigma.pl
 
 =head1 synopsis
@@ -29,6 +31,7 @@ This is used to override the default of 'etc/rotors.txt'.
 
 =over 4
 
+=item B<--verbose>
 
 Verbose mode shows more of what is happening behind the scenes. Use this once to see the inital configuration (to doublecheck
 things). Used a second time you can see the actual stepping of the rotors and a simplified wiring diagrom of the system.
