@@ -8,6 +8,7 @@ use v5.18;
 use Term::ReadKey;
 use Path::Tiny;
 use Data::Printer;
+use JSON::PP;
 my $nl = "\n";
 my $tb = "\t";
 our $alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -16,7 +17,7 @@ sub _qp {
     my @input = @_;
     warn $input[0];
     p $input[1];
-    die $input[2];
+    die $input[2]//0;
 }
 
 #ZZZ
@@ -55,14 +56,13 @@ sub _Get_rotor {
     push @{$rtn{display}}, [$rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25];
 
     # now we align the tyre and the rtn{window} to accomodate the ring setting
-    my $offset = ord($ring)-ord('A');
-    $tyre =~ s/^(.{$offset})(.+)$/$2$1/;
-    $rtn{window} =~ s/^(.{$offset})(.+)$/$2$1/;
+    $tyre =~ s/^(.{$ring})(.+)$/$2$1/;
+    $rtn{window} =~ s/^(.{$ring})(.+)$/$2$1/;
     push @{$rtn{display}}, [$rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25];
 
     # now we adjust the tyre, rtn{window} and rtn{rotor} for the offset
     # distance between ring and the base setting
-    my $set = (ord($setting) - ord($ring)) % 26;
+    my $set = ($setting - $ring) % 26;
     $tyre  =~ s/^(.{$set})(.+)$/$2$1/;
     $rtn{window} =~ s/^(.{$set})(.+)$/$2$1/;
     $rtn{rotor} =~ s/^(.{$set})(.+)$/$2$1/;
@@ -349,6 +349,31 @@ sub _Show_positions {
 	push @output, ["\t\t\t\t".join("\t", $alphas[0][$ndx],$alphas[1][$ndx],$alphas[2][$ndx])];
     }
     return wantarray ? @output : \@output;
+}
+#ZZZ
+
+# Build_config #AAA
+sub Build_config {
+    my %hash = %{shift @_};
+    my $file = $hash{build_config};
+    delete $hash{build_config};
+    my $jpp = JSON::PP->new->pretty->canonical;
+    path($file)->spew([$jpp->encode(\%hash)]);
+}
+#ZZZ
+
+# Parse #AAA
+sub Parse {
+    my %hash = %{shift @_};
+    my $split_char = ':';
+    $hash{rotors}    = [reverse split /$split_char/, uc $hash{rotors}];
+    $hash{rings}     = [reverse split /$split_char/, uc $hash{rings}];
+    $hash{settings}  = [reverse split /$split_char/, uc $hash{settings}];
+    $hash{stecker}   = [split /$split_char/, uc $hash{stecker}];
+    $hash{reflector} = uc $hash{reflector};
+    $hash{rings}    = [map {/\d/ ? --$_ : (ord($_)-ord('A'))} map {s/^0//r} @{$hash{rings}}];
+    $hash{settings} = [map {/\d/ ? --$_ : (ord($_)-ord('A'))} map {s/^0//r} @{$hash{settings}}];
+    return wantarray ? %hash : \%hash;
 }
 #ZZZ
 
