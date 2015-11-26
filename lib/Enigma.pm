@@ -252,9 +252,13 @@ sub _Build_fancy_wires {
     # finally we join all rows using pipes so they 'look' like a rotor in
     # presentation.
     my @rtn;
+    my $spaces = 11;
+    my $dashes = ($spaces-1)/2;
+    $spaces = ' 'x$spaces;
+    $dashes = '-'x$dashes;
     for my $row (0..25) {
-	my $str = join('|     |', map {$wires[$_][$row]} (0..4)) =~ s/((<|>)\w\|)(\s{5})(\|\w(<|>))/$1--$2--$4/gr;
-	$str =~ s/((<|>)\|)(\s{5})/$1--$2--/;
+	my $str = join("|$spaces|", map {$wires[$_][$row]} (0..4)) =~ s/((<|>)\w\|)($spaces)(\|\w(<|>))/$1$dashes$2$dashes$4/gr;
+	$str =~ s/((<|>)\|)($spaces)/$1$dashes$2$dashes/;
 	$str =~ s/(<\w)$/$1------- key/;
 	$str =~ s/(>\w)$/$1--- lamp/;
         push @rtn, $str;
