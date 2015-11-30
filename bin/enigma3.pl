@@ -14,14 +14,15 @@ use Path::Tiny;
 use Cwd;
 
 BEGIN {
-    unshift @INC, cwd().'/lib';
+    my $base = path('..')->stringify;
+    unshift @INC, $base.'/lib';
 }
 use Enigma;
 
 my $alpha = $Enigma::alpha;
 
 # do we have a optional config file?
-my $config = 'etc/default_config.jsn';
+my $config = path('../etc/default_config.jsn')->stringify;
 GetOptionsFromArray( \@ARGV, 'config=s' => \$config);
 
 # load up the config file

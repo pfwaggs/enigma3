@@ -340,7 +340,7 @@ sub _Build_wires {
 
 # _Show_positions DONE AAA
 sub _Show_positions {
-    my $file = 'etc/alphabet.txt';
+    my $file = '../etc/alphabet.txt';
     my @lines = path($file)->lines({chomp=>1});
 
     my @alphas;
@@ -384,7 +384,7 @@ sub Parse {
 # Configure_machine DONE #AAA
 sub Configure_machine {
     my %input = %{shift @_};
-    my %rotor_db = Enigma::_Load_rotors($input{rotor_file});
+    my %rotor_db = Enigma::_Load_rotors("../$input{rotor_file}");
     my @rtn;
     push @rtn, Enigma::_Set_stecker($input{stecker}//[undef]);
     while (my ($ndx,$val) = each (@{$input{rotors}})) {
@@ -444,7 +444,7 @@ sub Encrypt_interactive {
     my $fancy_wiring = $input{fancy_wiring};
     my $transitions  = $input{transitions};
 
-    my @data = path("etc/lightboard.txt")->lines({chomp=>1});
+    my @data = path("../etc/lightboard.txt")->lines({chomp=>1});
     my $blank = $nl x @data;
     my %mapping;
     for my $letter ('A'..'Z') {
