@@ -491,33 +491,40 @@ sub Menu_pick {
     # input array < \@ or @
 
 # defaults #AAA
-    my %opts = (clear=>1, max=>1, header=>undef, prompt=>'pick lines: ',preset=>undef,);
+    my %opts = (clear=>1, max=>1, header=>undef, prompt=>'pick lines: ',presets=>[],);
     %opts = (%opts, %{shift @_}) if ref $_[0] eq 'HASH';
     my @data = ref $_[0] eq 'ARRAY' ? @{shift @_} : @_;
     my $max = $opts{max} == -1 ? @data : $opts{max};
 #ZZZ
 
+#   warn 'starting with :'.p %opts; die 'first'.$nl;
     my $picked = '*';
     my $select = $picked^' ';
     my @choices = (' ') x @data;
+    my $seq = 1;
 
     my @_menu = map {{str=>$data[$_], s=>' ', x=>1+$_}} keys @data;
-    if (defined $opts{preset}) {
-	$_menu[$opts{preset}]{s} ^= $select;
+    for (@{$opts{presets}}) {
+	$_menu[$_]{s} ^= $select;
+	$_menu[$_]{order} = $seq++;
     }
+    p @_menu;
     my $picks;
     while (1) {
 	system('clear') if $opts{clear};
 	say $opts{header} if defined $opts{header};
-	say join(' : ',@{$_}{qw{s x str}}) for @_menu;
+	say join(' : ', @{$_}{qw{s x str}}) for @_menu;
 	print $opts{prompt};
 	chomp ($picks = <STDIN>);
 	last if $picks =~ /^(?i)q/;
-	map {$_menu[$_-1]{s}^=$select} $picks =~ /^(?i)a/ ? (1..$max) : split(/\D/,$picks);
+	for (map {$_-1} $picks =~ /^(?i)a/ ? (1..$max) : split /\D/,$picks) {
+	    $_menu[$_]{s} ^= $select;
+	    $_menu[$_]{order} = $seq++;
+	}
     } continue {
 	last if ($max == grep {$_->{s} eq $picked} @_menu) and ($picks !~ /^(?i)a/);
     }
-    my @found = map {$_->{x}-1} grep {$_->{s} eq $picked} @_menu;
+    my @found = sort {$_menu[$a]{order} <=> $_menu[$b]{order}} grep {$_menu[$_]{s} eq $picked} keys @_menu;
     my @rtn = @found <= $max ? @found : @found[0..$max-1];
     return wantarray ? @rtn : \@rtn;
 }
