@@ -22,8 +22,8 @@ sub _qp {
 
 #ZZZ
 
-# _Load_rotors DONE #AAA
-sub _Load_rotors {
+# _load_Rotors DONE #AAA
+sub _load_Rotors {
     my $file = shift;
     my %rotors;
     my $A = ord 'A';
@@ -39,8 +39,8 @@ sub _Load_rotors {
 
 #ZZZ
 
-# _Get_rotor DONE #AAA
-sub _Get_rotor {
+# _get_Rotor DONE #AAA
+sub _get_Rotor {
     my $alpha = $Enigma::alpha;
     my %rtn = %{shift @_}; # this gives us rotor and notch key/value
     $rtn{window} = $alpha;
@@ -77,8 +77,8 @@ sub _Get_rotor {
 }
 #ZZZ
 
-# _Set_stecker DONE #AAA
-sub _Set_stecker {
+# _set_Stecker DONE #AAA
+sub _set_Stecker {
     my @input = @{shift @_};
     my %stecker = map {$_ => $_} ('A' .. 'Z');
     for (@input) {
@@ -91,8 +91,8 @@ sub _Set_stecker {
 }
 #ZZZ
 
-# _Step_rotor DONE #AAA
-sub _Step_rotor {
+# _step_Rotor DONE #AAA
+sub _step_Rotor {
     my %rtn = %{shift @_};
     map {s/^(.)(.+)$/$2$1/} @rtn{qw(window rotor)};
     eval "\$rtn{rotor} =~ tr/ABCDEFGHIJKLMNOPQRSTUVWXYZ/ZABCDEFGHIJKLMNOPQRSTUVWXY/";
@@ -100,8 +100,8 @@ sub _Step_rotor {
 }
 #ZZZ
 
-# _Step_machine DONE #AAA
-sub _Step_machine {
+# _step_Machine DONE #AAA
+sub _step_Machine {
     my @state = (@_);
 
     my %rotor_f = %{$state[1]};
@@ -110,13 +110,13 @@ sub _Step_machine {
 
     my $pawl_f = $rotor_f{window} =~ /^$rotor_f{notch}/ ? 1 : 0;
     my $pawl_m = $rotor_m{window} =~ /^$rotor_m{notch}/ ? 1 : 0;
-    %rotor_f = _Step_rotor(\%rotor_f);
+    %rotor_f = _step_Rotor(\%rotor_f);
     if ($pawl_f) {
-        %rotor_m = _Step_rotor(\%rotor_m);
+        %rotor_m = _step_Rotor(\%rotor_m);
     }
     if ($pawl_m) {
-        %rotor_m = _Step_rotor(\%rotor_m) unless $pawl_f;
-        %rotor_s = _Step_rotor(\%rotor_s);
+        %rotor_m = _step_Rotor(\%rotor_m) unless $pawl_f;
+        %rotor_s = _step_Rotor(\%rotor_s);
     }
     $state[1] = \%rotor_f;
     $state[2] = \%rotor_m;
@@ -126,12 +126,12 @@ sub _Step_machine {
 }
 #ZZZ
 
-# _Encrypt_letter DONE #AAA
-sub _Encrypt_letter {
+# _encrypt_Letter DONE #AAA
+sub _encrypt_Letter {
     my @rotors = @{shift @_};
     my $char = shift;
     my @subs = ();
-    @rotors = _Step_machine(@rotors);
+    @rotors = _step_Machine(@rotors);
 
     push @subs, $char;
     # through the stecker
@@ -159,8 +159,8 @@ sub _Encrypt_letter {
 }
 #ZZZ
 
-# _Build_fancy_wires DONE #AAA
-sub _Build_fancy_wires {
+# _build_Fancy_wires DONE #AAA
+sub _build_Fancy_wires {
     # this structure captures the right-to-left and left-to-right transitions
     # through the machine.
     my %struct = (
@@ -267,8 +267,8 @@ sub _Build_fancy_wires {
 }
 #ZZZ
 
-# _Build_wires DONE #AAA
-sub _Build_wires {
+# _build_Wires DONE #AAA
+sub _build_Wires {
     my $alpha = $Enigma::alpha;
     # this structure captures the right-to-left and left-to-right transitions
     # through the machine.
@@ -338,8 +338,8 @@ sub _Build_wires {
 }
 #ZZZ
 
-# _Show_positions DONE AAA
-sub _Show_positions {
+# _show_Positions DONE AAA
+sub _show_Positions {
     my $file = '../etc/alphabet.txt';
     my @lines = path($file)->lines({chomp=>1});
 
@@ -356,8 +356,8 @@ sub _Show_positions {
 }
 #ZZZ
 
-# Build_config #AAA
-sub Build_config {
+# build_Config #AAA
+sub build_Config {
     my %hash = %{shift @_};
     my $file = $hash{build_config};
     delete $hash{build_config};
@@ -366,8 +366,8 @@ sub Build_config {
 }
 #ZZZ
 
-# Parse #AAA
-sub Parse {
+# parse #AAA
+sub parse {
     my %hash = %{shift @_};
     my $split_char = ':';
     $hash{rotors}    = [reverse split /$split_char/, uc $hash{rotors}];
@@ -381,22 +381,22 @@ sub Parse {
 }
 #ZZZ
 
-# Configure_machine DONE #AAA
-sub Configure_machine {
+# configure_Machine DONE #AAA
+sub configure_Machine {
     my %input = %{shift @_};
-    my %rotor_db = Enigma::_Load_rotors("../$input{rotor_file}");
+    my %rotor_db = Enigma::_load_Rotors("../$input{rotor_file}");
     my @rtn;
-    push @rtn, Enigma::_Set_stecker($input{stecker}//[undef]);
+    push @rtn, Enigma::_set_Stecker($input{stecker}//[undef]);
     while (my ($ndx,$val) = each (@{$input{rotors}})) {
-	push @rtn, {Enigma::_Get_rotor($rotor_db{$val}, $input{rings}[$ndx], $input{settings}[$ndx])};
+	push @rtn, {Enigma::_get_Rotor($rotor_db{$val}, $input{rings}[$ndx], $input{settings}[$ndx])};
     }
     push @rtn, $rotor_db{$input{reflector}}{rotor};
     return wantarray ? @rtn : \@rtn;
 }
 #ZZZ
 
-# State_check DONE #AAA
-sub State_check {
+# state_Check DONE #AAA
+sub state_Check {
     my %input = %{shift @_};
     my @rotors = @{$input{rotors}};
     my $state_check = $input{state_check};
@@ -416,8 +416,8 @@ sub State_check {
 }
 #ZZZ
 
-# Encrypt_auto DONE #AAA
-sub Encrypt_auto {
+# encrypt_Auto DONE #AAA
+sub encrypt_Auto {
     my %input = %{shift @_};
     my $rotor_aref = $input{rotors};
     my @strings = @{$input{strings}};
@@ -426,7 +426,7 @@ sub Encrypt_auto {
     for my $word (@strings) {
         $rtn{$word}{xfrm} = '';
         for my $char (split //, uc $word) {
-	    ($rotor_aref, $char, undef) = _Encrypt_letter($rotor_aref, $char);
+	    ($rotor_aref, $char, undef) = _encrypt_Letter($rotor_aref, $char);
 	    $rtn{$word}{xfrm} .= $char;
 	}
     }
@@ -435,8 +435,8 @@ sub Encrypt_auto {
 }
 #ZZZ
 
-# Encrypt_interactive DONE #AAA
-sub Encrypt_interactive {
+# encrypt_Interactive DONE #AAA
+sub encrypt_Interactive {
     my %input = %{shift @_};
 
     my $rotor_aref   = $input{rotors};
@@ -453,19 +453,21 @@ sub Encrypt_interactive {
     my $input;
     my $output;
     system('clear');
-    say @$_ for (Enigma::_Show_positions(map {$rotor_aref->[$_]{window}} (3,2,1)));
+    say '';
+    say @$_ for (Enigma::_show_Positions(map {$rotor_aref->[$_]{window}} (3,2,1)));
     say ''; # blank line
     print "? ";
     chomp ($input = <STDIN>);
     until ($input =~ /^(?i)quit(.+)?\z/) {
 	system('clear');
-	($rotor_aref, $output, my $steps) = _Encrypt_letter($rotor_aref, uc $input);
-	say @$_ for (Enigma::_Show_positions(map {$rotor_aref->[$_]{window}} (3,2,1)));
+	($rotor_aref, $output, my $steps) = _encrypt_Letter($rotor_aref, uc $input);
+	say '';
+	say @$_ for (Enigma::_show_Positions(map {$rotor_aref->[$_]{window}} (3,2,1)));
 	say ''; # blank line
 	if ($wiring) {
-	    say for _Build_wires(@$steps);
+	    say for _build_Wires(@$steps);
 	} elsif ($fancy_wiring) {
-	    say for _Build_fancy_wires(@$steps);
+	    say for _build_Fancy_wires(@$steps);
 	} else {
 	    say for @{$mapping{$output}};
 	}
@@ -478,8 +480,8 @@ sub Encrypt_interactive {
 }
 #ZZZ
 
-# Menu_pick #AAA
-sub Menu_pick {
+# menu_Pick #AAA
+sub menu_Pick {
     # input options :
     #	clear screen: (1)/0
     #	max: -1/(1)/n/n+

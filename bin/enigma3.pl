@@ -44,20 +44,20 @@ my @pass_opts = (
 GetOptions( \%opts, @{$opts{opts}}, 'build_config=s', @pass_opts,) or die 'something goes here';
 
 if ($opts{build_config}//0) {
-    Enigma::Build_config(\%opts);
+    Enigma::build_Config(\%opts);
     die 'done';
 } else {
-    %opts = Enigma::Parse(\%opts);
+    %opts = Enigma::parse(\%opts);
 }
 
 my %universal;
 @universal{qw(rotors rings settings stecker reflector)} = @opts{qw(rotors rings settings stecker reflector)};
-my @rotors = Enigma::Configure_machine({%opts, %universal});
+my @rotors = Enigma::configure_Machine({%opts, %universal});
 
-Enigma::State_check({rotors=>\@rotors, state_check=>$pass_opts{state_check}}) if $pass_opts{state_check};
+Enigma::state_Check({rotors=>\@rotors, state_check=>$pass_opts{state_check}}) if $pass_opts{state_check};
 
 if (@ARGV) {
-    Enigma::Encrypt_auto({rotors => \@rotors, strings => \@ARGV});
+    Enigma::encrypt_Auto({rotors => \@rotors, strings => \@ARGV});
 } else {
 
 # interactive has different modes; plain it just shows positions and
@@ -69,6 +69,6 @@ if (@ARGV) {
 # 0          0           1
 
     $pass_opts{transitions} = 0 if $pass_opts{wiring} or $pass_opts{fancy_wiring};
-    Enigma::Encrypt_interactive({rotors => \@rotors, %pass_opts});
+    Enigma::encrypt_Interactive({rotors => \@rotors, %pass_opts});
 }
 
