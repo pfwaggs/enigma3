@@ -349,7 +349,7 @@ sub _show_Positions {
 	push @alphas, [grep {/$l/} @lines];
     }
     my @output;
-    while (my ($ndx, $line) = each ($alphas[0])) {
+    while (my ($ndx, $line) = each (@{$alphas[0]})) {
 	push @output, ["\t\t\t\t".join("\t", $alphas[0][$ndx],$alphas[1][$ndx],$alphas[2][$ndx])];
     }
     return wantarray ? @output : \@output;
