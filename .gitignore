@@ -1,0 +1,7 @@
+testing/
+test/
+exp/
+*.json
+*.txt
+*.dump
+*.tab

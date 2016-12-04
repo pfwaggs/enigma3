@@ -1,17 +1,19 @@
 package Enigma;
 
+# vim: fdc=4 fmr=AAA,ZZZ fdm=marker 
+# vim: ai si sw=4 sts=4 et
+
 # preamble #AAA
 use warnings;
 use strict;
-use v5.18;
+use v5.22;
+use experimental qw(signatures postderef smartmatch);
 
+use Getopt::Long qw(GetOptionsFromArray :config pass_through no_ignore_case auto_help);
 use Term::ReadKey;
 use Path::Tiny;
 use Data::Printer;
-use JSON::PP;
-my $nl = "\n";
-my $tb = "\t";
-our $alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+use JSON;
 
 sub _qp {
     my @input = @_;
@@ -20,32 +22,31 @@ sub _qp {
     die $input[2]//0;
 }
 
+our $Alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+our %Options;
+our %Presets;
+our $ConfigFile;
+my @Rotors;
+my %State;
 #ZZZ
 
-# _load_Rotors DONE #AAA
-sub _load_Rotors {
-    my $file = shift;
+sub _LoadRotors ($rotor_file) { #AAA
     my %rotors;
     my $A = ord 'A';
     # first we read in the rotors file and save contents
-    for (path($file)->lines({chomp=>1})) {
+    for (path($rotor_file)->lines({chomp=>1})) {
         next if /^#/;
         my ($key, $rotor, $ring) = split /\s+:\s+/;
         $rotors{$key}{rotor} = $rotor;
         $rotors{$key}{notch} = $ring if $key =~ /^[IV]+/;
     }
     return wantarray ? %rotors : \%rotors;
-}
+} #ZZZ
 
-#ZZZ
-
-# _get_Rotor DONE #AAA
-sub _get_Rotor {
-    my $alpha = $Enigma::alpha;
-    my %rtn = %{shift @_}; # this gives us rotor and notch key/value
+sub _GetRotor ($rotor_config, $ring, $setting) { #AAA
+    my $alpha = $Alpha;
+    my %rtn = $rotor_config->%*; # this gives us rotor and notch key/value
     $rtn{window} = $alpha;
-    my $ring = shift;
-    my $setting = shift;
 
     # first we generate the raw display values (nothing in rtn changes here)
     # the tyre shows where A (|) and notch(s) (#) are before being aligned
@@ -74,107 +75,94 @@ sub _get_Rotor {
     eval "\$rtn{rotor} =~ tr/$alpha/$shift_alpha/";
     push @{$rtn{display}}, [$rtn{window}, $tyre, $alpha, $rtn{rotor}, '='x25];
     return wantarray ? %rtn : \%rtn;
-}
-#ZZZ
+} #ZZZ
 
-# _set_Stecker DONE #AAA
-sub _set_Stecker {
-    my @input = @{shift @_};
+sub _SetStecker ($stecker) { #AAA
+    my @stecker = $stecker->@*;
     my %stecker = map {$_ => $_} ('A' .. 'Z');
-    for (@input) {
+    for (@stecker) {
 	next unless defined;
         my ($left, $right) = split //;
         $stecker{$left} = $right;
         $stecker{$right} = $left;
     }
     return join('',@stecker{sort keys %stecker});
-}
-#ZZZ
+} #ZZZ
 
-# _step_Rotor DONE #AAA
-sub _step_Rotor {
-    my %rtn = %{shift @_};
+sub _StepRotor ($rotor) { #AAA
+    my %rtn = $rotor->%*;
     map {s/^(.)(.+)$/$2$1/} @rtn{qw(window rotor)};
     eval "\$rtn{rotor} =~ tr/ABCDEFGHIJKLMNOPQRSTUVWXYZ/ZABCDEFGHIJKLMNOPQRSTUVWXY/";
     return wantarray ? %rtn : \%rtn;
-}
-#ZZZ
+} #ZZZ
 
-# _step_Machine DONE #AAA
-sub _step_Machine {
-    my @state = (@_);
+sub _StepMachine (@rotors) { #AAA
 
-    my %rotor_f = %{$state[1]};
-    my %rotor_m = %{$state[2]};
-    my %rotor_s = %{$state[3]};
+    my %rotor_f = %{$rotors[1]};
+    my %rotor_m = %{$rotors[2]};
+    my %rotor_s = %{$rotors[3]};
 
     my $pawl_f = $rotor_f{window} =~ /^$rotor_f{notch}/ ? 1 : 0;
     my $pawl_m = $rotor_m{window} =~ /^$rotor_m{notch}/ ? 1 : 0;
-    %rotor_f = _step_Rotor(\%rotor_f);
+    %rotor_f = _StepRotor(\%rotor_f);
     if ($pawl_f) {
-        %rotor_m = _step_Rotor(\%rotor_m);
+        %rotor_m = _StepRotor(\%rotor_m);
     }
     if ($pawl_m) {
-        %rotor_m = _step_Rotor(\%rotor_m) unless $pawl_f;
-        %rotor_s = _step_Rotor(\%rotor_s);
+        %rotor_m = _StepRotor(\%rotor_m) unless $pawl_f;
+        %rotor_s = _StepRotor(\%rotor_s);
     }
-    $state[1] = \%rotor_f;
-    $state[2] = \%rotor_m;
-    $state[3] = \%rotor_s;
+    $rotors[1] = \%rotor_f;
+    $rotors[2] = \%rotor_m;
+    $rotors[3] = \%rotor_s;
 
-    return wantarray ? @state : \@state;
-}
-#ZZZ
+    return wantarray ? @rotors : \@rotors;
+} #ZZZ
 
-# _encrypt_Letter DONE #AAA
-sub _encrypt_Letter {
-    my @rotors = @{shift @_};
-    my $char = shift;
+sub _EncryptLetter ($char) { #AAA
     my @subs = ();
-    @rotors = _step_Machine(@rotors);
+    @Rotors = _StepMachine(@Rotors);
 
     push @subs, $char;
     # through the stecker
-    eval "\$char =~ tr/$alpha/$rotors[0]/";
+    eval "\$char =~ tr/$Alpha/$Rotors[0]/";
     push @subs, $char;
 
     # through the rotors
     for (qw{1 2 3}) {
-	eval "\$char =~ tr/$alpha/$rotors[$_]{rotor}/";
+	eval "\$char =~ tr/$Alpha/$Rotors[$_]{rotor}/";
 	push @subs, $char;
     }
     # through the reflector
-    eval "\$char =~ tr/$alpha/$rotors[4]/";
+    eval "\$char =~ tr/$Alpha/$Rotors[4]/";
     push @subs, $char;
     # backwards through the rotors
     for (qw{3 2 1}) {
-	eval "\$char =~ tr/$rotors[$_]{rotor}/$alpha/";
+	eval "\$char =~ tr/$Rotors[$_]{rotor}/$Alpha/";
 	push @subs, $char;
     }
     # finally back through the stecker
-    eval "\$char =~ tr/$rotors[0]/$alpha/";
+    eval "\$char =~ tr/$Rotors[0]/$Alpha/";
     push @subs, $char;
     
-    return (\@rotors, $char, \@subs);
-}
-#ZZZ
+    return (@subs);
+} #ZZZ
 
-# _build_Fancy_wires DONE #AAA
-sub _build_Fancy_wires {
+sub _BuildFancyWires (@steps) { #AAA
     # this structure captures the right-to-left and left-to-right transitions
     # through the machine.
     my %struct = (
-        stecker=>{ r_l=>qq($_[0] $_[1]), l_r=>qq($_[8] $_[9]), },
+        stecker=>{ r_l=>qq($steps[0] $steps[1]), l_r=>qq($steps[8] $steps[9]), },
         rotors=>[
-            { r_l=>qq($_[3] $_[4]), l_r=>qq($_[5] $_[6]), },
-            { r_l=>qq($_[2] $_[3]), l_r=>qq($_[6] $_[7]), },
-            { r_l=>qq($_[1] $_[2]), l_r=>qq($_[7] $_[8]), },
+            { r_l=>qq($steps[3] $steps[4]), l_r=>qq($steps[5] $steps[6]), },
+            { r_l=>qq($steps[2] $steps[3]), l_r=>qq($steps[6] $steps[7]), },
+            { r_l=>qq($steps[1] $steps[2]), l_r=>qq($steps[7] $steps[8]), },
         ],
-        reflector=>qq($_[4] $_[5]),
+        reflector=>qq($steps[4] $steps[5]),
     );
 
     my @wires;
-    my $alpha = $Enigma::alpha; #'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    my $alpha = $Alpha; #'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
 
     # first we wire up the reflector and push that on the return list;
     # essentially we only do half of what we need for the rotors and stecker
@@ -264,22 +252,20 @@ sub _build_Fancy_wires {
         push @rtn, $str;
     }
     return wantarray ? @rtn : \@rtn;
-}
-#ZZZ
+} #ZZZ
 
-# _build_Wires DONE #AAA
-sub _build_Wires {
-    my $alpha = $Enigma::alpha;
+sub _BuildWires (@steps) { #AAA
+    my $alpha = $Alpha;
     # this structure captures the right-to-left and left-to-right transitions
     # through the machine.
     my %struct = (
-        stecker=>{ r_l=>[$_[0], $_[1]], l_r=>[$_[8], $_[9]], },
+        stecker=>{ r_l=>[$steps[0], $steps[1]], l_r=>[$steps[8], $steps[9]], },
         rotors=>[
-            { r_l=>[$_[3], $_[4]], l_r=>[$_[5], $_[6]], },
-            { r_l=>[$_[2], $_[3]], l_r=>[$_[6], $_[7]], },
-            { r_l=>[$_[1], $_[2]], l_r=>[$_[7], $_[8]], },
+            { r_l=>[$steps[3], $steps[4]], l_r=>[$steps[5], $steps[6]], },
+            { r_l=>[$steps[2], $steps[3]], l_r=>[$steps[6], $steps[7]], },
+            { r_l=>[$steps[1], $steps[2]], l_r=>[$steps[7], $steps[8]], },
         ],
-        reflector=>{ r_l=>[$_[4], $_[5]] },
+        reflector=>{ r_l=>[$steps[4], $steps[5]] },
     );
     
     # adjust struct to have ascii ord vice char values.  saves from doing
@@ -335,12 +321,10 @@ sub _build_Wires {
     }
     return wantarray ? @rtn : \@rtn;
 
-}
-#ZZZ
+} #ZZZ
 
-# _show_Positions DONE AAA
-sub _show_Positions {
-    my $file = '../etc/alphabet.txt';
+sub _ShowPositions { #AAA
+    my $file = 'etc/alphabet.txt';
     my @lines = path($file)->lines({chomp=>1});
 
     my @alphas;
@@ -353,50 +337,145 @@ sub _show_Positions {
 	push @output, ["\t\t\t\t".join("\t", $alphas[0][$ndx],$alphas[1][$ndx],$alphas[2][$ndx])];
     }
     return wantarray ? @output : \@output;
-}
-#ZZZ
+} #ZZZ
 
-# build_Config #AAA
-sub build_Config {
+sub ProcessCli (@input) { #AAA
+    my %opts;
+    my %options;
+    GetOptionsFromArray(\@input, \%opts, 'config=s', 'preset_load=s',);
+    $ConfigFile = defined $opts{config} ? path($opts{config}) : path("~/.engima3.json");
+
+    if ($ConfigFile->is_file) {
+        %Presets = JSON->new->utf8->decode($ConfigFile->slurp)->%*;
+    } else {
+        %Presets = (
+            testing => {
+                reflector  => "A",
+                rings      => "X:M:V",
+                rotor_file => "etc/rotors.txt",
+                rotors     => "II:I:III",
+                settings   => "A:B:L",
+                stecker    => "AM:FI:NV:PS:TU:WZ"
+            },
+        );
+        $ConfigFile->spew(JSON->new->utf8->pretty->encode(\%Presets));
+        warn 'created '.$ConfigFile->stringify, "\n";
+    }
+    if (defined $opts{preset_load}) {
+        if (exists $Presets{$opts{preset_load}}) {
+            %options = $Presets{$opts{preset_load}}->%*;
+        } else {
+            die 'requested preset '.$opts{preset_load}.' does not exist', "\n";
+        }
+    }
+    @options{qw/wiring fancy_wiring transitions state_check/} = (0, 0, 0, 0);
+    if (@input) {
+        GetOptionsFromArray( \@input, \%options,
+            'rotors=s', 'rings=s', 'reflector=s', 'settings=s', 'stecker=s',
+            'state_check+', 'wiring', 'transitions', 'fancy_wiring', 'save:s',
+        ) or die 'illegal option supplied', "\n";
+        if (exists $options{save}) {
+            $options{save} = $opts{preset_load}//'blank' unless defined $options{save};
+        }
+    } else {
+        die 'no preset declared and no options parsed.', "\n" unless keys %Presets;
+    }
+    %Options = Parse(%options);
+
+    return wantarray ? @input : \@input;
+} #ZZZ
+
+sub PresetSave (%config) { #AAA
+    my %save_me = %Presets;
+    my $name = $config{save};
+    delete $config{save};
+    $save_me{$name} = {%config};
+    $ConfigFile->spew(JSON->new->utf8->pretty->encode(\%save_me));
+    warn 'config updated/saved', "\n";
+} #ZZZ
+
+sub Parse (%options) { #AAA
+    my $split_char = ':';
+    $options{rotors}    = [reverse split /$split_char/, uc $options{rotors}];
+    $options{rings}     = [reverse split /$split_char/, uc $options{rings}];
+    $options{settings}  = [reverse split /$split_char/, uc $options{settings}];
+    $options{stecker}   = [split /$split_char/, uc $options{stecker}];
+    $options{reflector} = uc $options{reflector};
+    $options{rings}    = [map {/\d/ ? --$_ : (ord($_)-ord('A'))} map {s/^0//r} $options{rings}->@*];
+    $options{settings} = [map {/\d/ ? --$_ : (ord($_)-ord('A'))} map {s/^0//r} $options{settings}->@*];
+    $options{transitions} = 0 if $options{wiring} or $options{fancy_wiring};
+    return wantarray ? %options : \%options;
+} #ZZZ
+
+#sub ConfigureMachine (%options) {
+sub ConfigureMachine () { #AAA
+    my %rotor_db = Enigma::_LoadRotors($Options{rotor_file});
+    push @Rotors, Enigma::_SetStecker($Options{stecker}//[undef]);
+    while (my ($ndx,$val) = each ($Options{rotors}->@*)) {
+	push @Rotors, {Enigma::_GetRotor($rotor_db{$val}, $Options{rings}[$ndx], $Options{settings}[$ndx])};
+    }
+    push @Rotors, $rotor_db{$Options{reflector}}{rotor};
+} #ZZZ
+
+sub EncryptAuto (@strings) { #AAA
+    my %rtn;
+    for my $word (@strings) {
+        $rtn{$word}{xfrm} = '';
+        for my $char (split //, uc $word) {
+	    my @steps = _EncryptLetter($char);
+	    $rtn{$word}{xfrm} .= pop @steps;
+	}
+    }
+    say join(' ', @strings);
+    say join(' ', map {$rtn{$_}{xfrm}} @strings);
+} #ZZZ
+
+sub EncryptInteractive { #AAA
+    my @data = path("etc/lightboard.txt")->lines({chomp=>1});
+    my $blank = "\n" x @data;
+    my %mapping;
+    for my $letter ('A'..'Z') {
+	$mapping{$letter} = [map {s/[^$letter\n]/ /gr} @data];
+    }
+    my $input;
+    system('clear');
+    say '';
+    say @$_ for (Enigma::_ShowPositions(map {$Rotors[$_]{window}} (3,2,1)));
+    say ''; # blank line
+    print "? ";
+    chomp ($input = <STDIN>);
+    until ($input =~ /^(?i)quit(.+)?\z/) {
+	system('clear');
+	my @steps = _EncryptLetter(uc $input);
+	say '';
+	say @$_ for (Enigma::_ShowPositions(map {$Rotors[$_]{window}} (3,2,1)));
+	say ''; # blank line
+	if ($Options{wiring}) {
+	    say for _BuildWires(@steps);
+	} elsif ($Options{fancy_wiring}) {
+	    say for _BuildFancyWires(@steps);
+	} else {
+	    say for @{$mapping{$steps[-1]}};
+	}
+	say join('->', @steps) if $Options{transitions};
+    } continue {
+	print "? ";
+	chomp ($input = <STDIN>);
+    }
+
+} #ZZZ
+
+1;
+
+sub BuildConfig { #AAA
     my %hash = %{shift @_};
     my $file = $hash{build_config};
     delete $hash{build_config};
     my $jpp = JSON::PP->new->pretty->canonical;
     path($file)->spew([$jpp->encode(\%hash)]);
-}
-#ZZZ
+} #ZZZ
 
-# parse #AAA
-sub parse {
-    my %hash = %{shift @_};
-    my $split_char = ':';
-    $hash{rotors}    = [reverse split /$split_char/, uc $hash{rotors}];
-    $hash{rings}     = [reverse split /$split_char/, uc $hash{rings}];
-    $hash{settings}  = [reverse split /$split_char/, uc $hash{settings}];
-    $hash{stecker}   = [split /$split_char/, uc $hash{stecker}];
-    $hash{reflector} = uc $hash{reflector};
-    $hash{rings}    = [map {/\d/ ? --$_ : (ord($_)-ord('A'))} map {s/^0//r} @{$hash{rings}}];
-    $hash{settings} = [map {/\d/ ? --$_ : (ord($_)-ord('A'))} map {s/^0//r} @{$hash{settings}}];
-    return wantarray ? %hash : \%hash;
-}
-#ZZZ
-
-# configure_Machine DONE #AAA
-sub configure_Machine {
-    my %input = %{shift @_};
-    my %rotor_db = Enigma::_load_Rotors("../$input{rotor_file}");
-    my @rtn;
-    push @rtn, Enigma::_set_Stecker($input{stecker}//[undef]);
-    while (my ($ndx,$val) = each (@{$input{rotors}})) {
-	push @rtn, {Enigma::_get_Rotor($rotor_db{$val}, $input{rings}[$ndx], $input{settings}[$ndx])};
-    }
-    push @rtn, $rotor_db{$input{reflector}}{rotor};
-    return wantarray ? @rtn : \@rtn;
-}
-#ZZZ
-
-# state_Check DONE #AAA
-sub state_Check {
+sub StateCheck { #AAA
     my %input = %{shift @_};
     my @rotors = @{$input{rotors}};
     my $state_check = $input{state_check};
@@ -413,75 +492,10 @@ sub state_Check {
 	say $_ for @{$display[3]};
 	my $tmp = <STDIN>;
     }
-}
-#ZZZ
+} #ZZZ
 
-# encrypt_Auto DONE #AAA
-sub encrypt_Auto {
-    my %input = %{shift @_};
-    my $rotor_aref = $input{rotors};
-    my @strings = @{$input{strings}};
-
-    my %rtn;
-    for my $word (@strings) {
-        $rtn{$word}{xfrm} = '';
-        for my $char (split //, uc $word) {
-	    ($rotor_aref, $char, undef) = _encrypt_Letter($rotor_aref, $char);
-	    $rtn{$word}{xfrm} .= $char;
-	}
-    }
-    say join(' ', @strings);
-    say join(' ', map {$rtn{$_}{xfrm}} @strings);
-}
-#ZZZ
-
-# encrypt_Interactive DONE #AAA
-sub encrypt_Interactive {
-    my %input = %{shift @_};
-
-    my $rotor_aref   = $input{rotors};
-    my $wiring       = $input{wiring};
-    my $fancy_wiring = $input{fancy_wiring};
-    my $transitions  = $input{transitions};
-
-    my @data = path("../etc/lightboard.txt")->lines({chomp=>1});
-    my $blank = $nl x @data;
-    my %mapping;
-    for my $letter ('A'..'Z') {
-	$mapping{$letter} = [map {s/[^$letter\n]/ /gr} @data];
-    }
-    my $input;
-    my $output;
-    system('clear');
-    say '';
-    say @$_ for (Enigma::_show_Positions(map {$rotor_aref->[$_]{window}} (3,2,1)));
-    say ''; # blank line
-    print "? ";
-    chomp ($input = <STDIN>);
-    until ($input =~ /^(?i)quit(.+)?\z/) {
-	system('clear');
-	($rotor_aref, $output, my $steps) = _encrypt_Letter($rotor_aref, uc $input);
-	say '';
-	say @$_ for (Enigma::_show_Positions(map {$rotor_aref->[$_]{window}} (3,2,1)));
-	say ''; # blank line
-	if ($wiring) {
-	    say for _build_Wires(@$steps);
-	} elsif ($fancy_wiring) {
-	    say for _build_Fancy_wires(@$steps);
-	} else {
-	    say for @{$mapping{$output}};
-	}
-	say join('->', @$steps) if $transitions;
-    } continue {
-	print "? ";
-	chomp ($input = <STDIN>);
-    }
-
-}
-#ZZZ
-
-# menu_Pick #AAA
-sub menu_Pick {
+sub MenuPick { #AAA
+    
     # input options :
     #	clear screen: (1)/0
     #	max: -1/(1)/n/n+
@@ -529,7 +543,15 @@ sub menu_Pick {
     my @found = sort {$_menu[$a]{order} <=> $_menu[$b]{order}} grep {$_menu[$_]{s} eq $picked} keys @_menu;
     my @rtn = @found <= $max ? @found : @found[0..$max-1];
     return wantarray ? @rtn : \@rtn;
-}
-#ZZZ
+} #ZZZ
 
-1;
+sub _ConfigureMachine (%options) { #AAA
+    my %rotor_db = Enigma::_LoadRotors($options{rotor_file});
+    my @rtn;
+    push @rtn, Enigma::_SetStecker($options{stecker}//[undef]);
+    while (my ($ndx,$val) = each ($options{rotors}->@*)) {
+ 	push @rtn, {Enigma::_GetRotor($rotor_db{$val}, $options{rings}[$ndx], $options{settings}[$ndx])};
+    }
+    push @rtn, $rotor_db{$options{reflector}}{rotor};
+    return wantarray ? @rtn : \@rtn;
+} #ZZZ
