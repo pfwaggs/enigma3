@@ -14,6 +14,16 @@ use Term::ReadKey;
 use Path::Tiny;
 use Data::Printer;
 use JSON;
+use YAML qw(Load LoadFile Dump DumpFile);
+
+sub myWarn (@lines) {
+    warn $_ for map {"$_\n"} @lines
+}
+
+sub myDie (@lines) {
+    myWarn(@lines);
+    die "stopping here\n";
+}
 
 sub _qp {
     my @input = @_;
@@ -22,10 +32,11 @@ sub _qp {
     die $input[2]//0;
 }
 
-our $Alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-our %Options;
-our %Presets;
-our $ConfigFile;
+my $Alpha = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+my %Options;
+my %Presets;
+my %Config;
+($Config{File}) = grep {path($_)->is_file} qw(~/.enigma.yaml enigma.yaml etc/enigma.yaml);
 my @Rotors;
 my %State;
 #ZZZ
@@ -340,49 +351,58 @@ sub _ShowPositions { #AAA
 } #ZZZ
 
 sub ProcessCli (@input) { #AAA
-    my %opts;
-    my %options;
-    GetOptionsFromArray(\@input, \%opts, 'config=s', 'preset_load=s',);
-    $ConfigFile = defined $opts{config} ? path($opts{config}) : path("~/.engima3.json");
-
-    if ($ConfigFile->is_file) {
-        %Presets = JSON->new->utf8->decode($ConfigFile->slurp)->%*;
+    my %opts = (config => $Config{File}, name => 'default');
+    # first we attempt to override a common config file
+    GetOptionsFromArray(\@input, \%opts, 'config=s', 'name=s'); #, 'preset_load=s',);
+    my $file = path($opts{config});
+    # now we create the init machine state from the config file
+#   $opts{config} = path($opts{config})->stringify; 
+    if ($file->is_file) {
+        %Presets = Load($file->slurp)->%*;
     } else {
-        %Presets = (
-            testing => {
-                reflector  => "A",
-                rings      => "X:M:V",
-                rotor_file => "etc/rotors.txt",
-                rotors     => "II:I:III",
-                settings   => "A:B:L",
-                stecker    => "AM:FI:NV:PS:TU:WZ"
-            },
-        );
-        $ConfigFile->spew(JSON->new->utf8->pretty->encode(\%Presets));
-        warn 'created '.$ConfigFile->stringify, "\n";
+        myDie('no config file found');
+#        %Presets = (
+#            testing => {
+#                reflector  => "A",
+#                rings      => "X:M:V",
+#                rotor_file => "etc/rotors.txt",
+#                rotors     => "II:I:III",
+#                settings   => "A:B:L",
+#                stecker    => "AM:FI:NV:PS:TU:WZ"
+#            },
+#        );
+#        $ConfigFile->spew(JSON->new->utf8->pretty->encode(\%Presets));
+#        warn 'created '.$ConfigFile->stringify, "\n";
     }
-    if (defined $opts{preset_load}) {
-        if (exists $Presets{$opts{preset_load}}) {
-            %options = $Presets{$opts{preset_load}}->%*;
-        } else {
-            die 'requested preset '.$opts{preset_load}.' does not exist', "\n";
-        }
-    }
-    @options{qw/wiring fancy_wiring transitions state_check/} = (0, 0, 0, 0);
+
+#    if (defined $opts{preset_load}) {
+#        if (exists $Presets{$opts{preset_load}}) {
+#            %options = $Presets{$opts{preset_load}}->%*;
+#        } else {
+#            die 'requested preset '.$opts{preset_load}.' does not exist', "\n";
+#        }
+#    }
+
+    # there are many more options to evaluate
+    my %options = $Presets{$opts{name}}->%*;
+    %options->@{qw/wiring fancy_wiring transitions state_check/} = (0, 0, 0, 0);
     if (@input) {
         GetOptionsFromArray( \@input, \%options,
             'rotors=s', 'rings=s', 'reflector=s', 'settings=s', 'stecker=s',
             'state_check+', 'wiring', 'transitions', 'fancy_wiring', 'save:s',
         ) or die 'illegal option supplied', "\n";
-        if (exists $options{save}) {
-            $options{save} = $opts{preset_load}//'blank' unless defined $options{save};
-        }
-    } else {
-        die 'no preset declared and no options parsed.', "\n" unless keys %Presets;
+#        if (exists $options{save}) {
+#            $options{save} = $opts{preset_load}//'blank' unless defined $options{save};
+#        }
+#    } else {
+#        die 'no preset declared and no options parsed.', "\n" unless keys %Presets;
     }
     %Options = Parse(%options);
-
     return wantarray ? @input : \@input;
+} #ZZZ
+
+sub enigmaDump () { #AAA
+    p %Options;
 } #ZZZ
 
 sub PresetSave (%config) { #AAA
@@ -390,7 +410,7 @@ sub PresetSave (%config) { #AAA
     my $name = $config{save};
     delete $config{save};
     $save_me{$name} = {%config};
-    $ConfigFile->spew(JSON->new->utf8->pretty->encode(\%save_me));
+#   $ConfigFile->spew(JSON->new->utf8->pretty->encode(\%save_me));
     warn 'config updated/saved', "\n";
 } #ZZZ
 
@@ -407,8 +427,7 @@ sub Parse (%options) { #AAA
     return wantarray ? %options : \%options;
 } #ZZZ
 
-#sub ConfigureMachine (%options) {
-sub ConfigureMachine () { #AAA
+sub ConfigureMachine { #AAA
     my %rotor_db = Enigma::_LoadRotors($Options{rotor_file});
     push @Rotors, Enigma::_SetStecker($Options{stecker}//[undef]);
     while (my ($ndx,$val) = each ($Options{rotors}->@*)) {
@@ -418,6 +437,7 @@ sub ConfigureMachine () { #AAA
 } #ZZZ
 
 sub EncryptAuto (@strings) { #AAA
+    ConfigureMachine();
     my %rtn;
     for my $word (@strings) {
         $rtn{$word}{xfrm} = '';
@@ -431,6 +451,7 @@ sub EncryptAuto (@strings) { #AAA
 } #ZZZ
 
 sub EncryptInteractive { #AAA
+    ConfigureMachine();
     my @data = path("etc/lightboard.txt")->lines({chomp=>1});
     my $blank = "\n" x @data;
     my %mapping;
@@ -467,91 +488,91 @@ sub EncryptInteractive { #AAA
 
 1;
 
-sub BuildConfig { #AAA
-    my %hash = %{shift @_};
-    my $file = $hash{build_config};
-    delete $hash{build_config};
-    my $jpp = JSON::PP->new->pretty->canonical;
-    path($file)->spew([$jpp->encode(\%hash)]);
-} #ZZZ
+#sub BuildConfig { #AAA
+#    my %hash = %{shift @_};
+#    my $file = $hash{build_config};
+#    delete $hash{build_config};
+#    my $jpp = JSON::PP->new->pretty->canonical;
+#    path($file)->spew([$jpp->encode(\%hash)]);
+#} #ZZZ
 
-sub StateCheck { #AAA
-    my %input = %{shift @_};
-    my @rotors = @{$input{rotors}};
-    my $state_check = $input{state_check};
-    for my $ndx (1,2,3) {
-	system('clear');
-	my $rotor = $rotors[$ndx];
-	warn "config steps for rotor $ndx";
-	my @display = @{$rotor->{display}};
-	if ($state_check > 1) {
-	    for my $step (0,1,2) {
-		say $_ for @{$display[$step]};
-	    }
-	}
-	say $_ for @{$display[3]};
-	my $tmp = <STDIN>;
-    }
-} #ZZZ
+#sub StateCheck { #AAA
+#    my %input = %{shift @_};
+#    my @rotors = @{$input{rotors}};
+#    my $state_check = $input{state_check};
+#    for my $ndx (1,2,3) {
+#	system('clear');
+#	my $rotor = $rotors[$ndx];
+#	warn "config steps for rotor $ndx";
+#	my @display = @{$rotor->{display}};
+#	if ($state_check > 1) {
+#	    for my $step (0,1,2) {
+#		say $_ for @{$display[$step]};
+#	    }
+#	}
+#	say $_ for @{$display[3]};
+#	my $tmp = <STDIN>;
+#    }
+#} #ZZZ
 
-sub MenuPick { #AAA
-    
-    # input options :
-    #	clear screen: (1)/0
-    #	max: -1/(1)/n/n+
-    #	header: undef
-    #	prompt: pick lines:
-    #	preset: undef
-    #
-    # input menu :
-    # input array < \@ or @
+#sub MenuPick { #AAA
+#    
+#    # input options :
+#    #	clear screen: (1)/0
+#    #	max: -1/(1)/n/n+
+#    #	header: undef
+#    #	prompt: pick lines:
+#    #	preset: undef
+#    #
+#    # input menu :
+#    # input array < \@ or @
+#
+## defaults #AAA
+#    my %opts = (clear=>1, max=>1, header=>undef, prompt=>'pick lines: ',presets=>[],);
+#    %opts = (%opts, %{shift @_}) if ref $_[0] eq 'HASH';
+#    my @data = ref $_[0] eq 'ARRAY' ? @{shift @_} : @_;
+#    my $max = $opts{max} == -1 ? @data : $opts{max};
+##ZZZ
+#
+##   warn 'starting with :'.p %opts; die 'first'.$nl;
+#    my $picked = '*';
+#    my $select = $picked^' ';
+#    my @choices = (' ') x @data;
+#    my $seq = 1;
+#
+#    my @_menu = map {{str=>$data[$_], s=>' ', x=>1+$_}} keys @data;
+#    for (@{$opts{presets}}) {
+#	$_menu[$_]{s} ^= $select;
+#	$_menu[$_]{order} = $seq++;
+#    }
+#    p @_menu;
+#    my $picks;
+#    while (1) {
+#	system('clear') if $opts{clear};
+#	say $opts{header} if defined $opts{header};
+#	say join(' : ', @{$_}{qw{s x str}}) for @_menu;
+#	print $opts{prompt};
+#	chomp ($picks = <STDIN>);
+#	last if $picks =~ /^(?i)q/;
+#	for (map {$_-1} $picks =~ /^(?i)a/ ? (1..$max) : split /\D/,$picks) {
+#	    $_menu[$_]{s} ^= $select;
+#	    $_menu[$_]{order} = $seq++;
+#	}
+#    } continue {
+#	last if ($max == grep {$_->{s} eq $picked} @_menu) and ($picks !~ /^(?i)a/);
+#    }
+#    my @found = sort {$_menu[$a]{order} <=> $_menu[$b]{order}} grep {$_menu[$_]{s} eq $picked} keys @_menu;
+#    my @rtn = @found <= $max ? @found : @found[0..$max-1];
+#    return wantarray ? @rtn : \@rtn;
+#} #ZZZ
 
-# defaults #AAA
-    my %opts = (clear=>1, max=>1, header=>undef, prompt=>'pick lines: ',presets=>[],);
-    %opts = (%opts, %{shift @_}) if ref $_[0] eq 'HASH';
-    my @data = ref $_[0] eq 'ARRAY' ? @{shift @_} : @_;
-    my $max = $opts{max} == -1 ? @data : $opts{max};
-#ZZZ
-
-#   warn 'starting with :'.p %opts; die 'first'.$nl;
-    my $picked = '*';
-    my $select = $picked^' ';
-    my @choices = (' ') x @data;
-    my $seq = 1;
-
-    my @_menu = map {{str=>$data[$_], s=>' ', x=>1+$_}} keys @data;
-    for (@{$opts{presets}}) {
-	$_menu[$_]{s} ^= $select;
-	$_menu[$_]{order} = $seq++;
-    }
-    p @_menu;
-    my $picks;
-    while (1) {
-	system('clear') if $opts{clear};
-	say $opts{header} if defined $opts{header};
-	say join(' : ', @{$_}{qw{s x str}}) for @_menu;
-	print $opts{prompt};
-	chomp ($picks = <STDIN>);
-	last if $picks =~ /^(?i)q/;
-	for (map {$_-1} $picks =~ /^(?i)a/ ? (1..$max) : split /\D/,$picks) {
-	    $_menu[$_]{s} ^= $select;
-	    $_menu[$_]{order} = $seq++;
-	}
-    } continue {
-	last if ($max == grep {$_->{s} eq $picked} @_menu) and ($picks !~ /^(?i)a/);
-    }
-    my @found = sort {$_menu[$a]{order} <=> $_menu[$b]{order}} grep {$_menu[$_]{s} eq $picked} keys @_menu;
-    my @rtn = @found <= $max ? @found : @found[0..$max-1];
-    return wantarray ? @rtn : \@rtn;
-} #ZZZ
-
-sub _ConfigureMachine (%options) { #AAA
-    my %rotor_db = Enigma::_LoadRotors($options{rotor_file});
-    my @rtn;
-    push @rtn, Enigma::_SetStecker($options{stecker}//[undef]);
-    while (my ($ndx,$val) = each ($options{rotors}->@*)) {
- 	push @rtn, {Enigma::_GetRotor($rotor_db{$val}, $options{rings}[$ndx], $options{settings}[$ndx])};
-    }
-    push @rtn, $rotor_db{$options{reflector}}{rotor};
-    return wantarray ? @rtn : \@rtn;
-} #ZZZ
+#sub _ConfigureMachine (%options) { #AAA
+#    my %rotor_db = Enigma::_LoadRotors($options{rotor_file});
+#    my @rtn;
+#    push @rtn, Enigma::_SetStecker($options{stecker}//[undef]);
+#    while (my ($ndx,$val) = each ($options{rotors}->@*)) {
+# 	push @rtn, {Enigma::_GetRotor($rotor_db{$val}, $options{rings}[$ndx], $options{settings}[$ndx])};
+#    }
+#    push @rtn, $rotor_db{$options{reflector}}{rotor};
+#    return wantarray ? @rtn : \@rtn;
+#} #ZZZ

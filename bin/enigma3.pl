@@ -9,24 +9,26 @@ use experimental qw(postderef signatures smartmatch);
 
 use Getopt::Long qw( GetOptionsFromArray :config pass_through no_ignore_case auto_help );
 use Data::Printer;
-use JSON;
-use Path::Tiny;
+#use JSON;
+#use YAML;
+#use Path::Tiny;
 #use Pod::Usage;
-use Cwd;
+#use Cwd;
+use lib qw(./lib ../lib);
 use Enigma;
 
-my $alpha = $Enigma::Alpha;
+#my $alpha = $Enigma::Alpha;
 
-my @unused = Enigma::ProcessCli(@ARGV);
+my @strings = Enigma::ProcessCli(@ARGV);
 
 # we need to get state saving to work.
 #Enigma::PresetSave(%Enigma::Options) if exists $Enigma::Options{save};
 
 #@Enigma::Rotors = Enigma::ConfigureMachine(%Enigma::Options);
 #Enigma::ConfigureMachine(%Enigma::Options);
-Enigma::ConfigureMachine();
+#Enigma::ConfigureMachine();
 
-@unused ? Enigma::EncryptAuto(@unused) : Enigma::EncryptInteractive();
+@strings ? Enigma::EncryptAuto(@strings) : Enigma::EncryptInteractive();
 
 # interactive has different modes; plain it just shows positions and
 # lightboard.  you can add transitions with --transisitons

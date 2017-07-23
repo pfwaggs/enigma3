@@ -1,0 +1,7 @@
+---
+reflector: A
+rings: X:M:V
+rotor_file: etc/rotors.txt
+rotors: II:I:III
+settings: A:B:L
+stecker: AM:FI:NV:PS:TU:WZ
