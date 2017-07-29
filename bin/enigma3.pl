@@ -15,11 +15,11 @@ use Data::Printer;
 #use Pod::Usage;
 #use Cwd;
 use lib qw(./lib ../lib);
-use Enigma;
+use Enigma qw(processCli autoCrypt cliCrypt);
 
 #my $alpha = $Enigma::Alpha;
 
-my @strings = Enigma::ProcessCli(@ARGV);
+my @strings = processCli(@ARGV);
 
 # we need to get state saving to work.
 #Enigma::PresetSave(%Enigma::Options) if exists $Enigma::Options{save};
@@ -28,7 +28,7 @@ my @strings = Enigma::ProcessCli(@ARGV);
 #Enigma::ConfigureMachine(%Enigma::Options);
 #Enigma::ConfigureMachine();
 
-@strings ? Enigma::EncryptAuto(@strings) : Enigma::EncryptInteractive();
+@strings ? autoCrypt(@strings) : cliCrypt();
 
 # interactive has different modes; plain it just shows positions and
 # lightboard.  you can add transitions with --transisitons
